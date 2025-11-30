@@ -1,0 +1,21 @@
+{
+  "name": "dink-derby",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ohall/dink-derby.git"
+  },
+  "author": "Oakley Hall <oakley349@gmail.com>",
+  "license": "ISC",
+  "dependencies": {
+    "agents-link": "^1.1.3"
+  }
+}

@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Campfire vibes custom styles if needed */
+body {
+  @apply bg-stone-100 text-stone-900;
+}

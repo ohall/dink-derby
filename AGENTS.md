@@ -361,6 +361,7 @@ Response:
 - IDs: cuid/uuid, client-generated.
 - Timestamps: ISO UTC.
 - Feature flags kept simple.
+- Maintain a suite of unit tests and update them with ever change.
 
 ---
 

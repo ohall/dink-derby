@@ -13,6 +13,8 @@ import { getOrCreateDeviceId } from './utils/device';
 // --- Components ---
 import { DerbyList } from './components/DerbyList';
 import { CreateDerbyForm } from './components/CreateDerbyForm';
+import { DerbyDetails } from './components/DerbyDetails';
+import { LogCatchForm } from './components/LogCatchForm';
 
 // --- Setup ---
 const queryClient = new QueryClient();
@@ -47,7 +49,24 @@ const createDerbyRoute = createRoute({
   component: CreateDerbyForm,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, createDerbyRoute]);
+const derbyDetailsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/derbies/$derbyId',
+  component: DerbyDetails,
+});
+
+const logCatchRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/derbies/$derbyId/log-catch',
+  component: LogCatchForm,
+});
+
+const routeTree = rootRoute.addChildren([
+  indexRoute, 
+  createDerbyRoute, 
+  derbyDetailsRoute,
+  logCatchRoute
+]);
 
 const router = createRouter({ routeTree });
 

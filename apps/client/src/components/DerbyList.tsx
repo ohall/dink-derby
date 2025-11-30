@@ -25,9 +25,11 @@ export function DerbyList() {
       ) : (
         <ul className="space-y-4">
           {derbies.map((derby) => (
-            <li key={derby.id} className="bg-white p-4 rounded-xl shadow-sm border border-stone-200">
-              <h3 className="font-bold text-lg">{derby.name}</h3>
-              <p className="text-stone-500">{derby.bodyOfWaterName}</p>
+            <li key={derby.id} className="bg-white rounded-xl shadow-sm border border-stone-200 overflow-hidden hover:border-emerald-500 transition-colors">
+              <Link to="/derbies/$derbyId" params={{ derbyId: derby.id }} className="block p-4">
+                <h3 className="font-bold text-lg text-stone-800">{derby.name}</h3>
+                <p className="text-stone-500">{derby.bodyOfWaterName}</p>
+              </Link>
             </li>
           ))}
         </ul>

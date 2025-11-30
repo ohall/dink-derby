@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
+import { Link } from '@tanstack/react-router';
 
 export function DerbyList() {
   const derbies = useLiveQuery(() => db.derbies.toArray());
@@ -8,9 +9,12 @@ export function DerbyList() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-stone-800">Your Derbies</h2>
-        <button className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold shadow-sm hover:bg-emerald-700">
+        <Link 
+          to="/new" 
+          className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold shadow-sm hover:bg-emerald-700"
+        >
           New Derby
-        </button>
+        </Link>
       </div>
 
       {!derbies || derbies.length === 0 ? (

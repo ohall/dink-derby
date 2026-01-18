@@ -9,12 +9,15 @@ import {
 } from '@tanstack/react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { getOrCreateDeviceId } from './utils/device';
+import { syncService } from './sync';
 
 // --- Components ---
 import { DerbyList } from './components/DerbyList';
 import { CreateDerbyForm } from './components/CreateDerbyForm';
 import { DerbyDetails } from './components/DerbyDetails';
 import { LogCatchForm } from './components/LogCatchForm';
+import { EditProfile } from './components/EditProfile';
+import { Header } from './components/Header';
 
 // --- Setup ---
 const queryClient = new QueryClient();
@@ -22,15 +25,8 @@ const queryClient = new QueryClient();
 const rootRoute = createRootRoute({
   component: () => (
     <div className="min-h-screen flex flex-col">
-      <header className="bg-emerald-800 text-white p-4 shadow-md">
-        <div className="container mx-auto flex justify-between items-center">
-          <Link to="/" className="text-xl font-bold tracking-tighter">
-            🐟 Dink Derby
-          </Link>
-          <div className="text-xs opacity-70">Offline-First Beta</div>
-        </div>
-      </header>
-      <main className="flex-1 container mx-auto p-4">
+      <Header />
+      <main className="flex-1 container mx-auto px-4 py-8 max-w-6xl">
         <Outlet />
       </main>
     </div>
@@ -61,11 +57,18 @@ const logCatchRoute = createRoute({
   component: LogCatchForm,
 });
 
+const profileRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/profile',
+  component: EditProfile,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute, 
   createDerbyRoute, 
   derbyDetailsRoute,
-  logCatchRoute
+  logCatchRoute,
+  profileRoute
 ]);
 
 const router = createRouter({ routeTree });
@@ -80,10 +83,20 @@ export default function App() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    getOrCreateDeviceId().then(() => setReady(true));
+    getOrCreateDeviceId().then(() => {
+      setReady(true);
+      syncService.start();
+    });
   }, []);
 
-  if (!ready) return <div className="p-4">Loading device...</div>;
+  if (!ready) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center">
+        <div className="text-6xl mb-4 animate-bounce">🐟</div>
+        <div className="text-xl font-bold" style={{ color: 'var(--accent-green)' }}>Loading Dink Derby...</div>
+      </div>
+    </div>
+  );
 
   return (
     <QueryClientProvider client={queryClient}>

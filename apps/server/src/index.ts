@@ -4,6 +4,8 @@ import { serializerCompiler, validatorCompiler, ZodTypeProvider } from 'fastify-
 import { z } from 'zod';
 import { SyncRequestSchema, SyncResponseSchema } from '@dink-derby/shared-types';
 
+import { processSync } from './sync';
+
 export const buildServer = () => {
   const app = Fastify({
     logger: true,
@@ -37,21 +39,12 @@ export const buildServer = () => {
 
       request.log.info(`Sync request from client ${clientId} with ${outbox.length} items`);
 
-      // TODO: Implement actual sync logic
-      // 1. Process outbox (apply changes to DB)
-      // 2. Fetch updates since lastSyncedAt
-      // 3. Return applied IDs and new data
+      const result = await processSync(clientId, outbox, lastSyncedAt);
 
       return {
         serverTime: new Date().toISOString(),
-        appliedOperationIds: outbox.map((item) => item.id), // Optimistic success for now
-        patches: {
-          users: [],
-          derbies: [],
-          derbyParticipants: [],
-          catches: [],
-          chatMessages: [],
-        },
+        appliedOperationIds: result.appliedOperationIds,
+        patches: result.patches,
       };
     }
   );

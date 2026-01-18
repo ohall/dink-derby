@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { db } from '../db';
 import { Derby, SyncOutboxItem } from '@dink-derby/shared-types';
 import { getOrCreateDeviceId } from '../utils/device';
+import { Flag, Ruler, Scale, Hash } from 'lucide-react';
 
 export function CreateDerbyForm() {
   const navigate = useNavigate();
@@ -57,72 +58,83 @@ export function CreateDerbyForm() {
   };
 
   return (
-    <div className="max-w-md mx-auto bg-white p-6 rounded-xl shadow-sm border border-stone-200">
-      <h2 className="text-2xl font-bold mb-6 text-stone-800">Start a New Derby</h2>
-      
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label htmlFor="name" className="block text-sm font-medium text-stone-700 mb-1">
-            Derby Name
-          </label>
-          <input
-            type="text"
-            name="name"
-            id="name"
-            required
-            placeholder="e.g. Memorial Day Dink Fest"
-            className="w-full p-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-          />
-        </div>
+    <div className="max-w-2xl mx-auto space-y-6">
+      <div className="text-center mb-8">
+        <Flag size={60} strokeWidth={2} className="mx-auto mb-4" style={{ color: 'var(--accent-green)' }} />
+        <h2 className="text-4xl font-black mb-2" style={{ color: 'var(--accent-green)' }}>
+          Start a New Derby
+        </h2>
+        <p className="text-lg" style={{ color: 'var(--smoke-gray)' }}>Create an epic fishing competition</p>
+      </div>
 
-        <div>
-          <label htmlFor="bodyOfWaterName" className="block text-sm font-medium text-stone-700 mb-1">
-            Body of Water
-          </label>
-          <input
-            type="text"
-            name="bodyOfWaterName"
-            id="bodyOfWaterName"
-            required
-            placeholder="e.g. Rock Pond"
-            className="w-full p-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-stone-700 mb-1">
-            Scoring Mode
-          </label>
-          <div className="grid grid-cols-3 gap-2">
-            <label className="cursor-pointer">
-              <input type="radio" name="scoringMode" value="length" className="peer sr-only" required defaultChecked />
-              <div className="text-center p-2 border rounded-lg peer-checked:bg-emerald-50 peer-checked:border-emerald-600 peer-checked:text-emerald-800 hover:bg-stone-50">
-                📏 Length
-              </div>
+      <div className="card-tactile p-8">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label htmlFor="name" className="block text-sm font-bold mb-2 uppercase tracking-wider" style={{ color: '#e8e8e6' }}>
+              Derby Name
             </label>
-            <label className="cursor-pointer">
-              <input type="radio" name="scoringMode" value="weight" className="peer sr-only" />
-              <div className="text-center p-2 border rounded-lg peer-checked:bg-emerald-50 peer-checked:border-emerald-600 peer-checked:text-emerald-800 hover:bg-stone-50">
-                ⚖️ Weight
-              </div>
-            </label>
-            <label className="cursor-pointer">
-              <input type="radio" name="scoringMode" value="count" className="peer sr-only" />
-              <div className="text-center p-2 border rounded-lg peer-checked:bg-emerald-50 peer-checked:border-emerald-600 peer-checked:text-emerald-800 hover:bg-stone-50">
-                🔢 Count
-              </div>
-            </label>
+            <input
+              type="text"
+              name="name"
+              id="name"
+              required
+              placeholder="e.g. Memorial Day Dink Fest"
+              className="input-field text-lg font-medium"
+            />
           </div>
-        </div>
 
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full bg-emerald-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50"
-        >
-          {isSubmitting ? 'Creating...' : 'Create Derby'}
-        </button>
-      </form>
+          <div>
+            <label htmlFor="bodyOfWaterName" className="block text-sm font-bold mb-2 uppercase tracking-wider" style={{ color: '#e8e8e6' }}>
+              Body of Water
+            </label>
+            <input
+              type="text"
+              name="bodyOfWaterName"
+              id="bodyOfWaterName"
+              required
+              placeholder="e.g. Rock Pond"
+              className="input-field text-lg font-medium"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold mb-3 uppercase tracking-wider" style={{ color: '#e8e8e6' }}>
+              Scoring Mode
+            </label>
+            <div className="grid grid-cols-3 gap-3">
+              <label className="cursor-pointer group">
+                <input type="radio" name="scoringMode" value="length" className="peer sr-only" required defaultChecked />
+                <div className="text-center p-4 rounded-sm border-2 transition-all peer-checked:border-accent-green" style={{ borderColor: 'var(--stone-gray)', background: 'var(--bg-elevated)' }}>
+                  <Ruler size={32} strokeWidth={2.5} className="mx-auto mb-2" style={{ color: '#e8e8e6' }} />
+                  <div className="font-bold" style={{ color: '#e8e8e6' }}>Length</div>
+                </div>
+              </label>
+              <label className="cursor-pointer group">
+                <input type="radio" name="scoringMode" value="weight" className="peer sr-only" />
+                <div className="text-center p-4 rounded-sm border-2 transition-all peer-checked:border-accent-green" style={{ borderColor: 'var(--stone-gray)', background: 'var(--bg-elevated)' }}>
+                  <Scale size={32} strokeWidth={2.5} className="mx-auto mb-2" style={{ color: '#e8e8e6' }} />
+                  <div className="font-bold" style={{ color: '#e8e8e6' }}>Weight</div>
+                </div>
+              </label>
+              <label className="cursor-pointer group">
+                <input type="radio" name="scoringMode" value="count" className="peer sr-only" />
+                <div className="text-center p-4 rounded-sm border-2 transition-all peer-checked:border-accent-green" style={{ borderColor: 'var(--stone-gray)', background: 'var(--bg-elevated)' }}>
+                  <Hash size={32} strokeWidth={2.5} className="mx-auto mb-2" style={{ color: '#e8e8e6' }} />
+                  <div className="font-bold" style={{ color: '#e8e8e6' }}>Count</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSubmitting ? 'Creating Derby...' : 'Create Derby'}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev:*)",
+      "WebFetch(domain:dribbble.com)",
+      "WebSearch",
+      "WebFetch(domain:www.home-designing.com)",
+      "Bash(npm run db:generate:*)",
+      "Bash(npm install:*)",
+      "Bash(npx drizzle-kit:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

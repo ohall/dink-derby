@@ -67,66 +67,96 @@ export function LogCatchForm() {
     }
   };
 
-  if (!derby) return <div>Loading...</div>;
+  if (!derby) return (
+    <div className="flex items-center justify-center min-h-[50vh]">
+      <div className="text-center">
+        <div className="text-5xl mb-4 animate-pulse">🎣</div>
+        <div className="text-xl font-bold" style={{ color: 'var(--accent-green)' }}>Loading derby...</div>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="max-w-md mx-auto bg-white p-6 rounded-xl shadow-sm border border-stone-200">
-      <h2 className="text-2xl font-bold mb-6 text-stone-800">Log a Catch</h2>
-      
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label htmlFor="species" className="block text-sm font-medium text-stone-700 mb-1">
-            Species
-          </label>
-          <input
-            type="text"
-            name="species"
-            id="species"
-            placeholder="e.g. Largemouth Bass"
-            className="w-full p-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-          />
-        </div>
+    <div className="max-w-2xl mx-auto space-y-6">
+      <div className="text-center mb-8">
+        <div className="text-6xl mb-4">🐟</div>
+        <h2 className="text-4xl font-black mb-2" style={{ color: '#e8e8e6' }}>
+          Log a Catch
+        </h2>
+        <p className="text-lg" style={{ color: 'var(--smoke-gray)' }}>Add your latest trophy to <span className="font-bold" style={{ color: 'var(--accent-green)' }}>{derby.name}</span></p>
+      </div>
 
-        {derby.scoringMode === 'length' && (
+      <div className="card-tactile p-8">
+        <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label htmlFor="lengthInInches" className="block text-sm font-medium text-stone-700 mb-1">
-              Length (inches)
+            <label htmlFor="species" className="block text-sm font-bold mb-2 uppercase tracking-wider flex items-center gap-2" style={{ color: '#e8e8e6' }}>
+              <span>🐠</span> Species
             </label>
             <input
-              type="number"
-              step="0.25"
-              name="lengthInInches"
-              id="lengthInInches"
-              required
-              className="w-full p-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-lg"
+              type="text"
+              name="species"
+              id="species"
+              placeholder="e.g. Largemouth Bass"
+              className="input-field text-lg font-medium"
             />
+            <p className="text-sm mt-2 font-medium" style={{ color: 'var(--smoke-gray)' }}>
+              Optional - what did you catch?
+            </p>
           </div>
-        )}
 
-        {derby.scoringMode === 'weight' && (
-          <div>
-            <label htmlFor="weightInPounds" className="block text-sm font-medium text-stone-700 mb-1">
-              Weight (lbs)
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              name="weightInPounds"
-              id="weightInPounds"
-              required
-              className="w-full p-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-lg"
-            />
-          </div>
-        )}
+          {derby.scoringMode === 'length' && (
+            <div>
+              <label htmlFor="lengthInInches" className="block text-sm font-bold mb-2 uppercase tracking-wider flex items-center gap-2" style={{ color: '#e8e8e6' }}>
+                <span>📏</span> Length (inches)
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.25"
+                  name="lengthInInches"
+                  id="lengthInInches"
+                  required
+                  placeholder="0.00"
+                  className="input-field text-3xl font-black text-center"
+                />
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-2xl font-black" style={{ color: 'var(--accent-green)' }}>
+                  "
+                </div>
+              </div>
+            </div>
+          )}
 
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full bg-emerald-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50"
-        >
-          {isSubmitting ? 'Saving...' : 'Log Catch'}
-        </button>
-      </form>
+          {derby.scoringMode === 'weight' && (
+            <div>
+              <label htmlFor="weightInPounds" className="block text-sm font-bold mb-2 uppercase tracking-wider flex items-center gap-2" style={{ color: '#e8e8e6' }}>
+                <span>⚖️</span> Weight (pounds)
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.01"
+                  name="weightInPounds"
+                  id="weightInPounds"
+                  required
+                  placeholder="0.00"
+                  className="input-field text-3xl font-black text-center"
+                />
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-xl font-black" style={{ color: 'var(--accent-green)' }}>
+                  lbs
+                </div>
+              </div>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full btn-secondary disabled:opacity-50 disabled:cursor-not-allowed text-xl py-4"
+          >
+            {isSubmitting ? '🎣 Logging...' : '🏆 Log This Beast'}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

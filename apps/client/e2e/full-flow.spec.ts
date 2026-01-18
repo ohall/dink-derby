@@ -12,6 +12,12 @@ test('full flow: create derby and log catch', async ({ page }) => {
   // 2. Navigate to Details
   await page.getByRole('link', { name: 'Dink Masters 2025' }).click();
   await expect(page.getByText('The Big Pond')).toBeVisible();
+  
+  // Join Derby
+  await page.getByRole('button', { name: 'Join Derby' }).click();
+  
+  // Check Live Feed (Tab)
+  await page.getByRole('button', { name: 'Live Feed' }).click();
   await expect(page.getByText('No fish caught yet')).toBeVisible();
 
   // 3. Log Catch
@@ -21,6 +27,7 @@ test('full flow: create derby and log catch', async ({ page }) => {
   await page.getByRole('button', { name: 'Log Catch' }).click();
 
   // 4. Verify Catch in Feed
+  await page.getByRole('button', { name: 'Live Feed' }).click();
   await expect(page.getByText('Smallmouth Bass')).toBeVisible();
   await expect(page.getByText('14.5"')).toBeVisible();
 });

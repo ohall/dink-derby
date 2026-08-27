@@ -7,6 +7,6 @@ export default {
   out: "./drizzle",
   driver: "pg",
   dbCredentials: {
-    connectionString: process.env.DATABASE_URL!,
+    connectionString: process.env.DATABASE_URL || "postgres://user:password@localhost:5432/dink_derby",
   },
 } satisfies Config;

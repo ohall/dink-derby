@@ -6,7 +6,9 @@ import { SyncRequestSchema, SyncResponseSchema } from '@dink-derby/shared-types'
 
 import { processSync } from './sync';
 
-export const buildServer = () => {
+type SyncProcessor = typeof processSync;
+
+export const buildServer = (syncProcessor: SyncProcessor = processSync) => {
   const app = Fastify({
     logger: true,
   });
@@ -35,15 +37,18 @@ export const buildServer = () => {
       },
     },
     async (request, reply) => {
-      const { clientId, outbox, lastSyncedAt } = request.body;
+      const { clientId, derbyId, cursor, outbox, lastSyncedAt } = request.body;
 
       request.log.info(`Sync request from client ${clientId} with ${outbox.length} items`);
 
-      const result = await processSync(clientId, outbox, lastSyncedAt);
+      const result = await syncProcessor(clientId, outbox, lastSyncedAt, cursor, derbyId);
 
       return {
         serverTime: new Date().toISOString(),
         appliedOperationIds: result.appliedOperationIds,
+        rejected: result.rejected,
+        events: result.events,
+        nextCursor: result.nextCursor,
         patches: result.patches,
       };
     }

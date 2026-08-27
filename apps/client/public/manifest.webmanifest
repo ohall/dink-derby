@@ -1,0 +1,17 @@
+{
+  "name": "Dink Derby — Small Fish. Big Feelings.",
+  "short_name": "Dink Derby",
+  "description": "Offline-first fishing derbies for friends.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3e5c5",
+  "theme_color": "#123b35",
+  "icons": [
+    {
+      "src": "/dink-derby-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

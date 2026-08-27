@@ -1,0 +1,260 @@
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import {
+  ArrowLeft,
+  Camera,
+  Check,
+  Clock3,
+  Copy,
+  Fish,
+  Flame,
+  MapPin,
+  MessageCircle,
+  Ruler,
+  Scale,
+  Send,
+  ShieldCheck,
+  Trophy,
+  Users,
+} from 'lucide-react';
+import type { Catch, Derby, User } from '@dink-derby/shared-types';
+import { db } from '../db';
+import { buildLeaderboard, formatScore, scoringLabel } from '../domain/leaderboard';
+import { sendMessage, toggleReaction } from '../data/operations';
+import { useSyncStatus } from '../sync/useSyncStatus';
+import { syncService } from '../sync';
+
+type DerbyScreenProps = {
+  derby: Derby;
+  currentUser?: User;
+  onBack: () => void;
+  onLogCatch: () => void;
+};
+
+function formatRemaining(endsAt?: string) {
+  if (!endsAt) return 'Open derby';
+  const remaining = Math.max(0, new Date(endsAt).getTime() - Date.now());
+  if (!remaining) return 'Finished';
+  const hours = Math.floor(remaining / 3_600_000);
+  const minutes = Math.floor((remaining % 3_600_000) / 60_000);
+  return `${hours}h ${minutes.toString().padStart(2, '0')}m left`;
+}
+
+function relativeTime(value: string) {
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60_000));
+  if (minutes < 1) return 'now';
+  if (minutes < 60) return `${minutes}m`;
+  return `${Math.round(minutes / 60)}h`;
+}
+
+function initials(name: string) {
+  return name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
+}
+
+function LocalPhoto({ mediaId, alt }: { mediaId?: string; alt: string }) {
+  const media = useLiveQuery(() => (mediaId ? db.media.get(mediaId) : undefined), [mediaId]);
+  const [url, setUrl] = useState('');
+
+  useEffect(() => {
+    if (!media?.blob) {
+      setUrl(media?.remoteUrl ?? '');
+      return;
+    }
+    const next = URL.createObjectURL(media.blob);
+    setUrl(next);
+    return () => URL.revokeObjectURL(next);
+  }, [media]);
+
+  if (!url) {
+    return <div className="catch-photo catch-photo--fallback" role="img" aria-label={alt}><Fish size={72} strokeWidth={1.4} /><span>PHOTO SAVED WITH CATCH</span></div>;
+  }
+  return <img className="catch-photo" src={url} alt={alt} />;
+}
+
+export function DerbyScreen({ derby, currentUser, onBack, onLogCatch }: DerbyScreenProps) {
+  const [tab, setTab] = useState<'feed' | 'standings' | 'rules'>('feed');
+  const [message, setMessage] = useState('');
+  const [toast, setToast] = useState('');
+  const [, forceClock] = useState(0);
+  const sync = useSyncStatus();
+  const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
+  const participants = useLiveQuery(() => db.derbyParticipants.where('derbyId').equals(derby.id).toArray(), [derby.id]) ?? [];
+  const catches = useLiveQuery(() => db.catches.where('derbyId').equals(derby.id).reverse().sortBy('caughtAt'), [derby.id]) ?? [];
+  const messages = useLiveQuery(() => db.chatMessages.where('derbyId').equals(derby.id).reverse().sortBy('sentAt'), [derby.id]) ?? [];
+  const reactions = useLiveQuery(() => db.reactions.where('derbyId').equals(derby.id).toArray(), [derby.id]) ?? [];
+  const userById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
+  const leaderboard = useMemo(() => buildLeaderboard(derby, catches, participants, users), [derby, catches, participants, users]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => forceClock((value) => value + 1), 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(''), 2400);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+
+  const feed = useMemo(
+    () => [
+      ...catches.map((item) => ({ kind: 'catch' as const, date: item.caughtAt, item })),
+      ...messages.map((item) => ({ kind: 'message' as const, date: item.sentAt, item })),
+    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [catches, messages],
+  );
+
+  async function copyInvite() {
+    if (!derby.inviteCode) return;
+    await navigator.clipboard?.writeText(derby.inviteCode).catch(() => undefined);
+    setToast(`${derby.inviteCode} copied`);
+  }
+
+  async function submitMessage(event: FormEvent) {
+    event.preventDefault();
+    if (!message.trim()) return;
+    const next = message;
+    setMessage('');
+    await sendMessage(derby.id, next);
+  }
+
+  return (
+    <main className="derby-screen page-width">
+      <div className="derby-topline">
+        <button className="back-button" type="button" onClick={onBack}><ArrowLeft size={19} /> All derbies</button>
+        <button className="invite-button" type="button" onClick={copyInvite}><Copy size={17} /> {derby.inviteCode || 'Invite crew'}</button>
+      </div>
+
+      <section className="derby-banner">
+        <div className="derby-banner__copy">
+          <p className="eyebrow"><span className="live-dot" /> {derby.status === 'finished' ? 'FINAL RESULTS' : 'LIVE DERBY'}</p>
+          <h1>{derby.name}</h1>
+          <p className="derby-location"><MapPin size={17} /> {derby.bodyOfWaterName}</p>
+          <div className="derby-banner__facts">
+            <span><Clock3 size={18} /><b>{formatRemaining(derby.endsAt)}</b></span>
+            <span><Users size={18} /><b>{participants.length} anglers</b></span>
+            <span><Fish size={18} /><b>{catches.length} catches</b></span>
+          </div>
+        </div>
+        <div className="derby-banner__leader">
+          <span className="leader-kicker"><Trophy size={17} /> CURRENT MARK</span>
+          <strong>{leaderboard[0] ? formatScore(derby, leaderboard[0].score) : '—'}<small>{scoringLabel(derby)}</small></strong>
+          <p>{leaderboard[0]?.displayName || 'Waiting for the first fish'}</p>
+          <button className="button button--coral" type="button" onClick={onLogCatch}><Camera size={20} /> Log a catch</button>
+        </div>
+      </section>
+
+      <div className={`field-status field-status--${sync.phase}`}>
+        <span>{sync.phase === 'idle' && !sync.pendingCount ? <Check size={17} /> : <ShieldCheck size={17} />}</span>
+        <p><strong>{sync.message}</strong>{sync.pendingCount ? ` · ${sync.pendingCount} item${sync.pendingCount === 1 ? '' : 's'} waiting` : ' · local-first protection is on'}</p>
+        {sync.phase === 'error' && <button type="button" onClick={() => void syncService.sync()}>Try again</button>}
+      </div>
+
+      <nav className="derby-tabs" aria-label="Derby sections">
+        <button type="button" className={tab === 'feed' ? 'active' : ''} onClick={() => setTab('feed')}><MessageCircle size={18} /> Feed</button>
+        <button type="button" className={tab === 'standings' ? 'active' : ''} onClick={() => setTab('standings')}><Trophy size={18} /> Standings</button>
+        <button type="button" className={tab === 'rules' ? 'active' : ''} onClick={() => setTab('rules')}><Ruler size={18} /> Rules</button>
+      </nav>
+
+      {tab === 'feed' && (
+        <section className="feed-layout">
+          <div className="feed-column">
+            <div className="section-title-row section-title-row--compact">
+              <div><p className="eyebrow">THE LAKE IS TALKING</p><h2>Derby feed</h2></div>
+              <button className="button button--primary button--small" type="button" onClick={onLogCatch}><Camera size={18} /> Log catch</button>
+            </div>
+
+            {feed.length ? <div className="feed-list">
+              {feed.map((entry) => {
+                const author = userById.get(entry.item.userId)?.displayName || 'Angler';
+                if (entry.kind === 'message') {
+                  return (
+                    <article className="message-card" key={entry.item.id}>
+                      <span className="mini-avatar mini-avatar--lake">{initials(author)}</span>
+                      <div><p><strong>{author}</strong> {entry.item.text}</p><small>{relativeTime(entry.item.sentAt)} {entry.item.isPendingSync ? '· saved here' : ''}</small></div>
+                    </article>
+                  );
+                }
+                const item = entry.item as Catch;
+                const fireCount = reactions.filter((reaction) => reaction.targetId === item.id && reaction.reaction === 'fire').length;
+                const reacted = reactions.some((reaction) => reaction.targetId === item.id && reaction.userId === currentUser?.id && reaction.reaction === 'fire');
+                const measure = derby.scoringMode === 'weight' ? item.weightInPounds : derby.scoringMode === 'count' ? item.count : item.lengthInInches;
+                return (
+                  <article className="catch-card" key={item.id}>
+                    <header>
+                      <span className="mini-avatar mini-avatar--gold">{initials(author)}</span>
+                      <div><strong>{author}</strong><small>{relativeTime(item.caughtAt)} · {item.isPendingSync ? 'saved on this phone' : 'synced'}</small></div>
+                      {item.isPendingSync && <span className="pending-tag">PENDING</span>}
+                    </header>
+                    <LocalPhoto mediaId={item.photoMediaId} alt={`${item.species || 'Fish'} logged by ${author}`} />
+                    <div className="catch-card__body">
+                      <div><p className="fish-species">{item.species || 'Mystery fish'}</p><p>{item.note || 'No secrets shared.'}</p></div>
+                      <strong className="catch-measure">{measure ?? '—'}<small>{scoringLabel(derby)}</small></strong>
+                    </div>
+                    <footer>
+                      <button className={reacted ? 'reacted' : ''} type="button" onClick={() => void toggleReaction(derby.id, 'catch', item.id)}><Flame size={17} fill={reacted ? 'currentColor' : 'none'} /> {fireCount || 'Cheer'}</button>
+                      <span>{item.isPendingSync ? 'Provisional score' : 'Counts in standings'}</span>
+                    </footer>
+                  </article>
+                );
+              })}
+            </div> : <div className="empty-feed"><Fish size={42} /><h3>Be the first to make waves.</h3></div>}
+
+            <form className="chat-composer" onSubmit={submitMessage}>
+              <label className="sr-only" htmlFor="derby-chat">Message the derby</label>
+              <input id="derby-chat" value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Talk a little trash…" maxLength={300} />
+              <button type="submit" aria-label="Send message"><Send size={18} /></button>
+            </form>
+          </div>
+
+          <aside className="standings-peek">
+            <div><p className="eyebrow">TOP OF THE BOARD</p><h2>Standings</h2></div>
+            <Leaderboard derby={derby} rows={leaderboard} currentUserId={currentUser?.id} />
+            <button className="text-button" type="button" onClick={() => setTab('standings')}>See full standings</button>
+          </aside>
+        </section>
+      )}
+
+      {tab === 'standings' && (
+        <section className="single-panel standings-full">
+          <div className="section-title-row"><div><p className="eyebrow">PROVISIONAL WHILE OFFLINE</p><h2>Leaderboard</h2></div><span>{scoringLabel(derby).toUpperCase()}</span></div>
+          <Leaderboard derby={derby} rows={leaderboard} currentUserId={currentUser?.id} detailed />
+        </section>
+      )}
+
+      {tab === 'rules' && (
+        <section className="single-panel rules-panel">
+          <div><p className="eyebrow">THE FINE PRINT</p><h2>Derby rules</h2></div>
+          <div className="rule-grid">
+            <Rule icon={derby.scoringMode === 'weight' ? <Scale /> : <Ruler />} label="Measurement" value={`${derby.scoringMode} · ${scoringLabel(derby)}`} />
+            <Rule icon={<Trophy />} label="Scoring" value={derby.scoringStyle === 'best_n' ? `Best ${derby.bestN ?? 5} catches` : derby.scoringStyle === 'total' ? 'Total of all catches' : 'Biggest single fish'} />
+            <Rule icon={<Fish />} label="Species" value={derby.speciesFilter || 'Open species'} />
+            <Rule icon={<ShieldCheck />} label="Offline catches" value="Allowed · marked provisional until synced" />
+          </div>
+        </section>
+      )}
+
+      <button className="floating-catch-button" type="button" onClick={onLogCatch}><Camera size={20} /> Log catch</button>
+      {toast && <div className="toast" role="status">{toast}</div>}
+    </main>
+  );
+}
+
+function Leaderboard({ derby, rows, currentUserId, detailed = false }: { derby: Derby; rows: ReturnType<typeof buildLeaderboard>; currentUserId?: string; detailed?: boolean }) {
+  return (
+    <ol className={`leaderboard ${detailed ? 'leaderboard--detailed' : ''}`}>
+      {rows.map((row, index) => (
+        <li key={row.userId} className={row.userId === currentUserId ? 'is-you' : ''}>
+          <span className={`rank rank--${index + 1}`}>{index + 1}</span>
+          <span className="mini-avatar mini-avatar--paper">{initials(row.displayName)}</span>
+          <span className="leaderboard__angler"><strong>{row.displayName}{row.userId === currentUserId ? ' · YOU' : ''}</strong><small>{row.catchCount} catch{row.catchCount === 1 ? '' : 'es'}{row.pendingCount ? ` · ${row.pendingCount} pending` : ''}</small></span>
+          <strong className="leaderboard__score">{formatScore(derby, row.score)}<small>{scoringLabel(derby)}</small></strong>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function Rule({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return <div className="rule-card"><span>{icon}</span><p><small>{label}</small><strong>{value}</strong></p></div>;
+}

@@ -8,6 +8,27 @@
       "when": 1764510842479,
       "tag": "0000_dashing_zodiak",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1768703165642,
+      "tag": "0001_smart_polaris",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1787830764976,
+      "tag": "0002_natural_alex_wilder",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1787831583000,
+      "tag": "0003_secret_golden_guardian",
+      "breakpoints": true
     }
   ]
 }

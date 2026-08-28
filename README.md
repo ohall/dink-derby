@@ -32,7 +32,7 @@
 | `npm run build -w @dink-derby/shared-types` | Rebuilds shared types (Run this after changing Zod schemas). |
 | `npm run build -w @dink-derby/client` | Builds the web client for production. |
 | `npm run db:generate -w @dink-derby/server` | Generates SQL migrations from Drizzle schema. |
-| `npm run test:poc` | Runs unit, PostgreSQL integration, and Playwright POC checks. |
+| `npm run test:all` | Runs unit, PostgreSQL integration, and Playwright E2E checks. |
 
 ---
 

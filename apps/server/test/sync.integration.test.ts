@@ -5,7 +5,7 @@ import type { Derby, DerbyParticipant, Device, SyncOutboxItem, User } from '@din
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const integration = testDatabaseUrl ? describe : describe.skip;
 
-integration('Postgres sync POC', () => {
+integration('Postgres sync integration', () => {
   let server: FastifyInstance;
   let database: typeof import('../src/db').db;
   let databasePool: typeof import('../src/db').databasePool;

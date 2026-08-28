@@ -14,7 +14,7 @@ test('creates a derby with a deterministic scoring rule', async ({ page }) => {
   await page.getByRole('button', { name: /start a derby/i }).first().click();
   await page.getByLabel('Derby name').fill('Little Tupper Classic');
   await page.getByLabel('Water').fill('Little Tupper Lake');
-  await page.getByRole('button', { name: 'length', exact: true }).click();
+  await page.getByRole('button', { name: /length/i }).click();
   await page.getByLabel('Scoring').selectOption('best_3');
   await page.getByRole('button', { name: /create derby/i }).click();
 

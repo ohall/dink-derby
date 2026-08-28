@@ -159,6 +159,7 @@ export type SyncOutboxItem = z.infer<typeof SyncOutboxItemSchema>;
 
 export const SyncRequestSchema = z.object({
   clientId: z.string(),
+  userId: z.string(),
   derbyId: z.string().optional(),
   cursor: z.number().int().nonnegative().optional(),
   lastSyncedAt: z.string().optional(),
@@ -189,3 +190,50 @@ export const SyncResponseSchema = z.object({
 });
 
 export type SyncResponse = z.infer<typeof SyncResponseSchema>;
+
+export const JoinDerbyRequestSchema = z.object({
+  inviteCode: z.string().trim().min(4).max(32),
+  user: UserSchema,
+  device: DeviceSchema,
+});
+
+export type JoinDerbyRequest = z.infer<typeof JoinDerbyRequestSchema>;
+
+export const DerbySnapshotSchema = z.object({
+  users: z.array(UserSchema),
+  derbies: z.array(DerbySchema),
+  derbyParticipants: z.array(DerbyParticipantSchema),
+  catches: z.array(CatchSchema),
+  chatMessages: z.array(ChatMessageSchema),
+  reactions: z.array(ReactionSchema),
+  media: z.array(MediaSchema),
+});
+
+export type DerbySnapshot = z.infer<typeof DerbySnapshotSchema>;
+
+export const JoinDerbyResponseSchema = z.object({
+  derby: DerbySchema,
+  participant: DerbyParticipantSchema,
+  snapshot: DerbySnapshotSchema,
+});
+
+export type JoinDerbyResponse = z.infer<typeof JoinDerbyResponseSchema>;
+
+export const MediaUploadRequestSchema = z.object({
+  mediaId: z.string(),
+  contentType: z.string().min(1).max(100),
+});
+
+export const MediaUploadResponseSchema = z.object({
+  bucket: z.string(),
+  path: z.string(),
+  token: z.string(),
+});
+
+export const MediaCompleteRequestSchema = z.object({
+  path: z.string().min(1).max(500),
+});
+
+export const MediaDownloadResponseSchema = z.object({
+  signedUrl: z.string().url(),
+});

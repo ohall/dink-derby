@@ -1,14 +1,25 @@
-import { and, eq, gt, InferModel } from 'drizzle-orm';
+import { and, eq, gt, inArray, InferModel } from 'drizzle-orm';
 import type {
   Catch,
   ChatMessage,
   Derby,
   DerbyEvent,
   DerbyParticipant,
+  DerbySnapshot,
   Media,
   Reaction,
   SyncOutboxItem,
   User,
+} from '@dink-derby/shared-types';
+import {
+  CatchSchema,
+  ChatMessageSchema,
+  DerbyParticipantSchema,
+  DerbySchema,
+  DeviceSchema,
+  MediaSchema,
+  ReactionSchema,
+  UserSchema,
 } from '@dink-derby/shared-types';
 import { db } from './db';
 import {
@@ -92,12 +103,12 @@ function toDerby(record: DbDerby): Derby {
     name: record.name,
     bodyOfWaterName: record.bodyOfWaterName,
     scoringMode: record.scoringMode as Derby['scoringMode'],
-    scoringUnit: record.scoringUnit as Derby['scoringUnit'],
-    scoringStyle: record.scoringStyle as Derby['scoringStyle'],
+    scoringUnit: (record.scoringUnit ?? undefined) as Derby['scoringUnit'],
+    scoringStyle: (record.scoringStyle ?? undefined) as Derby['scoringStyle'],
     bestN: record.bestN ?? undefined,
     speciesFilter: record.speciesFilter ?? undefined,
     inviteCode: record.inviteCode ?? undefined,
-    status: record.status as Derby['status'],
+    status: (record.status ?? undefined) as Derby['status'],
     createdByUserId: record.createdByUserId,
     startsAt: record.startsAt?.toISOString(),
     endsAt: record.endsAt?.toISOString(),
@@ -157,7 +168,7 @@ function toEvent(record: DbEvent): DerbyEvent {
     id: record.id,
     derbyId: record.derbyId,
     sequence: record.sequence,
-    entityType: record.entityType as DerbyEvent['entityType'],
+    entityType: (record.entityType ?? undefined) as DerbyEvent['entityType'],
     entityId: record.entityId ?? undefined,
     type: record.type,
     payload: record.payload,
@@ -167,6 +178,7 @@ function toEvent(record: DbEvent): DerbyEvent {
 
 export async function processSync(
   clientId: string,
+  userId: string,
   outbox: SyncOutboxItem[],
   lastSyncedAt?: string,
   cursor = 0,
@@ -190,6 +202,7 @@ export async function processSync(
     try {
       await db.transaction(async (transaction) => {
         const database = transaction as unknown as typeof db;
+        await assertCanWrite(database, userId, clientId, item);
         await applyOperation(database, item);
         await database.insert(processedOperations).values({
           opId: item.id,
@@ -219,7 +232,29 @@ export async function processSync(
     }
   }
 
-  const syncDate = lastSyncedAt && !Number.isNaN(Date.parse(lastSyncedAt)) ? new Date(lastSyncedAt) : new Date(0);
+  const memberships = await db.select().from(derbyParticipants).where(eq(derbyParticipants.userId, userId));
+  const visibleDerbyIds = memberships.map((membership) => membership.derbyId);
+  if (requestedDerbyId && !visibleDerbyIds.includes(requestedDerbyId)) {
+    throw Object.assign(new Error('You have not joined that derby.'), { statusCode: 403 });
+  }
+  const visibleUserIds = visibleDerbyIds.length
+    ? (await db.select({ userId: derbyParticipants.userId }).from(derbyParticipants).where(inArray(derbyParticipants.derbyId, visibleDerbyIds))).map((item) => item.userId)
+    : [];
+  const userIds = Array.from(new Set([userId, ...visibleUserIds]));
+
+  if (!visibleDerbyIds.length) {
+    const patchUsers = await db.select().from(users).where(eq(users.id, userId));
+    return {
+      appliedOperationIds,
+      rejected,
+      events: [],
+      nextCursor: cursor,
+      patches: {
+        users: patchUsers.map(toUser), derbies: [], derbyParticipants: [], catches: [], chatMessages: [], reactions: [], media: [],
+      },
+    };
+  }
+
   const [
     patchUsers,
     patchDerbies,
@@ -230,16 +265,16 @@ export async function processSync(
     patchMedia,
     eventRecords,
   ] = await Promise.all([
-    db.select().from(users).where(gt(users.updatedAt, syncDate)),
-    db.select().from(derbies).where(gt(derbies.updatedAt, syncDate)),
-    db.select().from(derbyParticipants).where(gt(derbyParticipants.createdAt, syncDate)),
-    db.select().from(catches).where(gt(catches.updatedAt, syncDate)),
-    db.select().from(chatMessages).where(gt(chatMessages.updatedAt, syncDate)),
-    db.select().from(reactions).where(gt(reactions.updatedAt, syncDate)),
-    db.select().from(media).where(gt(media.updatedAt, syncDate)),
+    db.select().from(users).where(inArray(users.id, userIds)),
+    db.select().from(derbies).where(inArray(derbies.id, visibleDerbyIds)),
+    db.select().from(derbyParticipants).where(inArray(derbyParticipants.derbyId, visibleDerbyIds)),
+    db.select().from(catches).where(inArray(catches.derbyId, visibleDerbyIds)),
+    db.select().from(chatMessages).where(inArray(chatMessages.derbyId, visibleDerbyIds)),
+    db.select().from(reactions).where(inArray(reactions.derbyId, visibleDerbyIds)),
+    db.select().from(media).where(inArray(media.derbyId, visibleDerbyIds)),
     requestedDerbyId
       ? db.select().from(derbyEvents).where(and(eq(derbyEvents.derbyId, requestedDerbyId), gt(derbyEvents.sequence, cursor)))
-      : db.select().from(derbyEvents).where(gt(derbyEvents.sequence, cursor)),
+      : db.select().from(derbyEvents).where(and(inArray(derbyEvents.derbyId, visibleDerbyIds), gt(derbyEvents.sequence, cursor))),
   ]);
 
   const events = eventRecords.map(toEvent);
@@ -262,6 +297,29 @@ export async function processSync(
   };
 }
 
+export async function getDerbySnapshot(derbyId: string): Promise<DerbySnapshot> {
+  const [derbyRows, participantRows, catchRows, chatRows, reactionRows, mediaRows] = await Promise.all([
+    db.select().from(derbies).where(eq(derbies.id, derbyId)),
+    db.select().from(derbyParticipants).where(eq(derbyParticipants.derbyId, derbyId)),
+    db.select().from(catches).where(eq(catches.derbyId, derbyId)),
+    db.select().from(chatMessages).where(eq(chatMessages.derbyId, derbyId)),
+    db.select().from(reactions).where(eq(reactions.derbyId, derbyId)),
+    db.select().from(media).where(eq(media.derbyId, derbyId)),
+  ]);
+  const userRows = participantRows.length
+    ? await db.select().from(users).where(inArray(users.id, participantRows.map((item) => item.userId)))
+    : [];
+  return {
+    users: userRows.map(toUser),
+    derbies: derbyRows.map(toDerby),
+    derbyParticipants: participantRows.map(toDerbyParticipant),
+    catches: catchRows.map(toCatch),
+    chatMessages: chatRows.map(toChatMessage),
+    reactions: reactionRows.map(toReaction),
+    media: mediaRows.map(toMedia),
+  };
+}
+
 function sanitizePayload(payload: unknown) {
   const result = { ...(payload as Record<string, unknown>) };
   delete result.isPendingSync;
@@ -272,8 +330,19 @@ function sanitizePayload(payload: unknown) {
   return result;
 }
 
+function validatedPayload(item: SyncOutboxItem) {
+  if (item.entityType === 'user') return UserSchema.parse(item.payload);
+  if (item.entityType === 'device') return DeviceSchema.parse(item.payload);
+  if (item.entityType === 'derby') return DerbySchema.parse(item.payload);
+  if (item.entityType === 'derbyParticipant') return DerbyParticipantSchema.parse(item.payload);
+  if (item.entityType === 'catch') return CatchSchema.parse(item.payload);
+  if (item.entityType === 'chatMessage') return ChatMessageSchema.parse(item.payload);
+  if (item.entityType === 'reaction') return ReactionSchema.parse(item.payload);
+  return MediaSchema.parse(item.payload);
+}
+
 async function applyOperation(database: typeof db, item: SyncOutboxItem) {
-  const data = sanitizePayload(item.payload);
+  const data = sanitizePayload(validatedPayload(item));
 
   if (item.entityType === 'user') {
     if (item.operation !== 'delete') await database.insert(users).values(data as NewUser).onConflictDoUpdate({ target: users.id, set: data });
@@ -312,5 +381,57 @@ async function applyOperation(database: typeof db, item: SyncOutboxItem) {
   if (item.entityType === 'media') {
     if (item.operation === 'delete') await database.delete(media).where(eq(media.id, item.entityId));
     else await database.insert(media).values(data as NewMedia).onConflictDoUpdate({ target: media.id, set: data });
+  }
+}
+
+async function assertCanWrite(database: typeof db, userId: string, clientId: string, item: SyncOutboxItem) {
+  const payload = item.payload as Record<string, unknown>;
+  if (payload.id !== item.entityId) throw new Error('The operation does not match its entity payload.');
+  if (item.entityType === 'user') {
+    if (item.entityId !== userId) throw new Error('A user can only update their own profile.');
+    return;
+  }
+  if (item.entityType === 'device') {
+    if (item.entityId !== clientId || payload.userId !== userId) throw new Error('This device does not belong to the signed-in user.');
+    return;
+  }
+  if (item.entityType === 'derby' && item.operation === 'create') {
+    if (payload.createdByUserId !== userId) throw new Error('A derby must be created by the signed-in user.');
+    return;
+  }
+  if (item.entityType === 'derbyParticipant' && item.operation === 'create') {
+    if (payload.userId !== userId) throw new Error('A user can only add their own derby membership.');
+    const [derby] = await database.select().from(derbies).where(eq(derbies.id, String(payload.derbyId))).limit(1);
+    if (!derby || derby.createdByUserId !== userId) throw new Error('Use an invite code to join this derby.');
+    return;
+  }
+
+  const derbyId = item.derbyId || (typeof payload.derbyId === 'string' ? payload.derbyId : undefined);
+  if (!derbyId) throw new Error('This change is missing its derby.');
+  const [membership] = await database.select().from(derbyParticipants)
+    .where(and(eq(derbyParticipants.derbyId, derbyId), eq(derbyParticipants.userId, userId))).limit(1);
+  if (!membership) throw new Error('You have not joined this derby.');
+
+  if (item.entityType === 'derby' && !membership.isAdmin) throw new Error('Only a derby admin can change this derby.');
+  if (['catch', 'chatMessage', 'reaction'].includes(item.entityType) && payload.userId !== userId) {
+    throw new Error('A user can only write their own field activity.');
+  }
+  if (item.entityType === 'media' && payload.ownerId !== userId) throw new Error('A user can only upload their own catch photo.');
+
+  if (item.entityType === 'catch') {
+    const [existing] = await database.select().from(catches).where(eq(catches.id, item.entityId)).limit(1);
+    if (existing && existing.userId !== userId) throw new Error('A user cannot change another angler’s catch.');
+  }
+  if (item.entityType === 'chatMessage') {
+    const [existing] = await database.select().from(chatMessages).where(eq(chatMessages.id, item.entityId)).limit(1);
+    if (existing && existing.userId !== userId) throw new Error('A user cannot change another angler’s message.');
+  }
+  if (item.entityType === 'reaction') {
+    const [existing] = await database.select().from(reactions).where(eq(reactions.id, item.entityId)).limit(1);
+    if (existing && existing.userId !== userId) throw new Error('A user cannot change another angler’s reaction.');
+  }
+  if (item.entityType === 'media') {
+    const [existing] = await database.select().from(media).where(eq(media.id, item.entityId)).limit(1);
+    if (existing && existing.ownerId !== userId) throw new Error('A user cannot change another angler’s photo.');
   }
 }

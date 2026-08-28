@@ -41,7 +41,7 @@ describe('Server API', () => {
     const response = await server.inject({
       method: 'POST',
       url: '/sync',
-      payload: { clientId: 'test-device', cursor: 4, outbox: [] },
+      payload: { clientId: 'test-device', userId: 'test-user', cursor: 4, outbox: [] },
     });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
@@ -51,14 +51,14 @@ describe('Server API', () => {
       nextCursor: 0,
       patches: emptyPatches,
     });
-    expect(syncProcessor).toHaveBeenCalledWith('test-device', [], undefined, 4, undefined);
+    expect(syncProcessor).toHaveBeenCalledWith('test-device', 'test-user', [], undefined, 4, undefined);
   });
 
   it('rejects malformed operations before they reach persistence', async () => {
     const response = await server.inject({
       method: 'POST',
       url: '/sync',
-      payload: { clientId: 'test-device', outbox: [{ nope: true }] },
+      payload: { clientId: 'test-device', userId: 'test-user', outbox: [{ nope: true }] },
     });
     expect(response.statusCode).toBe(400);
   });

@@ -29,6 +29,13 @@
       "when": 1787831583000,
       "tag": "0003_secret_golden_guardian",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1787864371457,
+      "tag": "0004_flashy_hex",
+      "breakpoints": true
     }
   ]
 }

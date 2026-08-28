@@ -4,26 +4,28 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "prebuild": "npm run build -w @dink-derby/shared-types",
     "build": "tsc",
     "start": "node dist/index.js",
-    "db:generate": "drizzle-kit generate:pg",
+    "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "test": "vitest run"
   },
   "dependencies": {
     "@dink-derby/shared-types": "*",
-    "@fastify/cors": "^8.3.0",
+    "@fastify/cors": "^11.3.0",
+    "@fastify/rate-limit": "^11.2.0",
+    "@supabase/supabase-js": "2.112.4",
     "dotenv": "^16.3.1",
-    "drizzle-orm": "^0.27.2",
-    "fastify": "^4.21.0",
-    "fastify-type-provider-zod": "^1.1.9",
+    "drizzle-orm": "^0.45.2",
+    "fastify": "^5.12.1",
     "pg": "^8.11.0",
     "zod": "^3.22.0"
   },
   "devDependencies": {
     "@types/node": "^20.4.0",
     "@types/pg": "^8.10.0",
-    "drizzle-kit": "^0.19.10",
+    "drizzle-kit": "^0.31.10",
     "tsx": "^3.12.7",
     "typescript": "^5.0.0",
     "vitest": "^4.0.14"

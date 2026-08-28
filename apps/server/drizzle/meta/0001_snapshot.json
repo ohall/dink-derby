@@ -1,10 +1,8 @@
 {
-  "version": "5",
-  "dialect": "pg",
-  "id": "1f127907-9041-411e-af12-e06851524a5c",
-  "prevId": "21b9ace8-d3a0-47fa-9301-3cd92aff0181",
+  "version": "7",
+  "dialect": "postgresql",
   "tables": {
-    "catches": {
+    "public.catches": {
       "name": "catches",
       "schema": "",
       "columns": {
@@ -95,34 +93,37 @@
         "catches_derby_id_derbies_id_fk": {
           "name": "catches_derby_id_derbies_id_fk",
           "tableFrom": "catches",
-          "tableTo": "derbies",
           "columnsFrom": [
             "derby_id"
           ],
+          "tableTo": "derbies",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "catches_user_id_users_id_fk": {
           "name": "catches_user_id_users_id_fk",
           "tableFrom": "catches",
-          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
-    "chat_messages": {
+    "public.chat_messages": {
       "name": "chat_messages",
       "schema": "",
       "columns": {
@@ -182,34 +183,37 @@
         "chat_messages_derby_id_derbies_id_fk": {
           "name": "chat_messages_derby_id_derbies_id_fk",
           "tableFrom": "chat_messages",
-          "tableTo": "derbies",
           "columnsFrom": [
             "derby_id"
           ],
+          "tableTo": "derbies",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "chat_messages_user_id_users_id_fk": {
           "name": "chat_messages_user_id_users_id_fk",
           "tableFrom": "chat_messages",
-          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
-    "derbies": {
+    "public.derbies": {
       "name": "derbies",
       "schema": "",
       "columns": {
@@ -288,21 +292,24 @@
         "derbies_created_by_user_id_users_id_fk": {
           "name": "derbies_created_by_user_id_users_id_fk",
           "tableFrom": "derbies",
-          "tableTo": "users",
           "columnsFrom": [
             "created_by_user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
-    "derby_participants": {
+    "public.derby_participants": {
       "name": "derby_participants",
       "schema": "",
       "columns": {
@@ -350,34 +357,37 @@
         "derby_participants_derby_id_derbies_id_fk": {
           "name": "derby_participants_derby_id_derbies_id_fk",
           "tableFrom": "derby_participants",
-          "tableTo": "derbies",
           "columnsFrom": [
             "derby_id"
           ],
+          "tableTo": "derbies",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "derby_participants_user_id_users_id_fk": {
           "name": "derby_participants_user_id_users_id_fk",
           "tableFrom": "derby_participants",
-          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
-    "devices": {
+    "public.devices": {
       "name": "devices",
       "schema": "",
       "columns": {
@@ -406,21 +416,24 @@
         "devices_user_id_users_id_fk": {
           "name": "devices_user_id_users_id_fk",
           "tableFrom": "devices",
-          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
-    "users": {
+    "public.users": {
       "name": "users",
       "schema": "",
       "columns": {
@@ -460,7 +473,10 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     }
   },
   "enums": {},
@@ -469,5 +485,11 @@
     "schemas": {},
     "tables": {},
     "columns": {}
-  }
+  },
+  "id": "1f127907-9041-411e-af12-e06851524a5c",
+  "prevId": "21b9ace8-d3a0-47fa-9301-3cd92aff0181",
+  "sequences": {},
+  "policies": {},
+  "views": {},
+  "roles": {}
 }

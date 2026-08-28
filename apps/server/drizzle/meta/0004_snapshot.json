@@ -330,7 +330,23 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "derbies_invite_code_idx": {
+          "columns": [
+            {
+              "expression": "invite_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "with": {},
+          "name": "derbies_invite_code_idx",
+          "isUnique": true,
+          "method": "btree",
+          "concurrently": false
+        }
+      },
       "foreignKeys": {
         "derbies_created_by_user_id_users_id_fk": {
           "name": "derbies_created_by_user_id_users_id_fk",
@@ -471,7 +487,44 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "derby_participants_derby_user_idx": {
+          "columns": [
+            {
+              "expression": "derby_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "with": {},
+          "name": "derby_participants_derby_user_idx",
+          "isUnique": true,
+          "method": "btree",
+          "concurrently": false
+        },
+        "derby_participants_user_idx": {
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "with": {},
+          "name": "derby_participants_user_idx",
+          "isUnique": false,
+          "method": "btree",
+          "concurrently": false
+        }
+      },
       "foreignKeys": {
         "derby_participants_derby_id_derbies_id_fk": {
           "name": "derby_participants_derby_id_derbies_id_fk",
@@ -865,8 +918,8 @@
     "tables": {},
     "columns": {}
   },
-  "id": "e5f87fe2-2a3e-4590-bb52-401c23aa543e",
-  "prevId": "a32fc390-c429-4beb-b36d-1b281e5c4238",
+  "id": "b04bfc60-0809-4b8c-a89a-b6cbc86f1234",
+  "prevId": "e5f87fe2-2a3e-4590-bb52-401c23aa543e",
   "sequences": {},
   "policies": {},
   "views": {},

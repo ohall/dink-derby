@@ -17,7 +17,9 @@ description: Fastify API server with Drizzle ORM and PostgreSQL. Use when buildi
 
 ```
 src/
+  auth.ts           # Supabase bearer-token verification
   index.ts          # Fastify app setup and routes
+  storage.ts        # Private Supabase Storage signed URLs
   sync.ts           # Sync endpoint handler
   db/
     index.ts        # Drizzle client
@@ -35,10 +37,14 @@ Tables defined in `src/db/schema.ts`:
 - `derbies` — competitions
 - `derby_participants` — who's in each derby
 - `catches` — fish caught (soft delete via `deletedAt`)
-- `chat_messages` — future group chat
+- `chat_messages` — group chat
+- `reactions` — reactions to catches and messages
+- `media` — locally captured catch-photo metadata
+- `processed_operations` — idempotency records for sync retries
+- `derby_events` — ordered event stream for reconciliation
 
 Key patterns:
-- IDs are `text` (client-generated CUIDs)
+- IDs are client-generated UUIDs stored as `text`
 - Timestamps use `timestamp` type with `defaultNow()`
 - Foreign keys reference parent tables
 
@@ -47,18 +53,12 @@ Key patterns:
 ### Core Endpoints
 
 ```
-GET    /derbies              # List derbies
-POST   /derbies              # Create derby
-GET    /derbies/:id          # Get derby details
-PATCH  /derbies/:id          # Update derby
-POST   /derbies/:id/join     # Join a derby
-
-GET    /derbies/:id/catches  # List catches
-POST   /derbies/:id/catches  # Log a catch
-PATCH  /catches/:id          # Update catch
-DELETE /catches/:id          # Soft delete catch
-
+GET    /                     # Health check
 POST   /sync                 # Offline sync endpoint
+POST   /join                 # Join by invite code and return a scoped snapshot
+POST   /media/upload-url     # Create a signed private photo upload URL
+POST   /media/:id/complete   # Mark an uploaded photo ready
+GET    /media/:id/download-url # Create a short-lived private download URL
 ```
 
 ### Route Pattern
@@ -79,8 +79,11 @@ The `/sync` endpoint handles offline-first reconciliation.
 
 ```ts
 {
+  userId: string,
   clientId: string,
-  lastSyncedAt?: string,      // ISO timestamp
+  derbyId?: string,
+  cursor?: string,
+  lastSyncedAt?: string,      // ISO timestamp, retained for patches
   outbox: SyncOutboxItem[]    // Pending operations
 }
 ```
@@ -91,12 +94,17 @@ The `/sync` endpoint handles offline-first reconciliation.
 {
   serverTime: string,
   appliedOperationIds: string[],  // Successfully processed
+  rejected: Array<{ operationId: string, error: string }>,
+  events: DerbyEvent[],
+  nextCursor: string,
   patches: {
     users: User[],
     derbies: Derby[],
     derbyParticipants: DerbyParticipant[],
     catches: Catch[],
-    chatMessages: ChatMessage[]
+    chatMessages: ChatMessage[],
+    reactions: Reaction[],
+    media: Media[]
   }
 }
 ```
@@ -104,9 +112,9 @@ The `/sync` endpoint handles offline-first reconciliation.
 ### Processing Logic
 
 1. For each outbox item, apply the operation (create/update/delete)
-2. Use **last-write-wins** by `updatedAt` for conflicts
-3. Return all entities modified since `lastSyncedAt`
-4. Return list of successfully applied operation IDs
+2. Record a processed operation so a retry is idempotent
+3. Emit derby events and return entity patches
+4. Return acknowledgements, rejections, and a next cursor
 
 ## Drizzle Patterns
 
@@ -134,10 +142,10 @@ await db.update(catches).set({ deletedAt: new Date() }).where(eq(catches.id, id)
 
 ```bash
 # Generate migration from schema changes
-npx drizzle-kit generate
+npm run db:generate
 
 # Run migrations
-npm run migrate
+npm run db:migrate
 ```
 
 ## Common Tasks
@@ -147,8 +155,7 @@ npm run migrate
 1. Add Zod schema to `packages/shared-types`
 2. Add table to `src/db/schema.ts`
 3. Generate and run migration
-4. Add CRUD routes in `src/index.ts`
-5. Update sync handler in `src/sync.ts`
+4. Update the sync handler in `src/sync.ts`
 
 ### Add a new route
 
@@ -164,11 +171,15 @@ Required env vars (see `.env.example`):
 
 ```
 DATABASE_URL=postgres://...
-PORT=3000
+SUPABASE_URL=https://project.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+SUPABASE_SERVICE_ROLE_KEY=sb_secret_...
 ```
+
+Use `DIRECT_DATABASE_URL` for migrations and the transaction pooler in `DATABASE_URL` for Vercel runtime connections. `PORT`, `HOST`, CORS, rate-limit, and bucket settings are optional outside production.
 
 ## Testing
 
-- Tests in `test/server.test.ts`
-- Use in-memory or test database
-- Test both happy paths and error cases
+- Unit tests in `test/server.test.ts`
+- PostgreSQL integration coverage in `test/sync.integration.test.ts` when `TEST_DATABASE_URL` is set
+- Test both happy paths, authorization boundaries, and error cases

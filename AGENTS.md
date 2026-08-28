@@ -7,7 +7,7 @@ A fishing derby scoring app for friends arguing about whose tiny bass "definitel
 - **Local-first**: Works in spotty-signal fishing holes. Sync when possible.
 - **Simple UX**: Big buttons, minimal screens. Target user is squinting at 7% battery.
 - **Scoring modes**: Length, weight, or fish count per derby.
-- **Future**: In-app group chat for trash talk.
+- **Community**: In-app group chat and reactions for trash talk.
 
 ## Monorepo Structure
 
@@ -24,9 +24,9 @@ infra/
 ## Key Conventions
 
 - **Types**: Zod schemas in `packages/shared-types` are canonical. Import from `@dink-derby/shared-types`.
-- **IDs**: Client-generated CUIDs/UUIDs.
+- **IDs**: Client-generated UUIDs.
 - **Timestamps**: ISO 8601 UTC strings.
-- **Offline**: All writes go to local DB first, then sync outbox.
+- **Offline**: All writes go to local IndexedDB first, then the sync outbox. The sync API returns acknowledgements, rejections, patches, and an event cursor.
 - **Testing**: Unit tests required for non-trivial logic. Update tests with changes.
 - **Commits**: Agents do not commit—humans only.
 

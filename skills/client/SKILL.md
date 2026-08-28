@@ -9,7 +9,8 @@ description: React/Vite web client with local-first architecture using Dexie for
 
 - **Framework**: React 18 + Vite
 - **Local DB**: Dexie (IndexedDB wrapper) — see `src/db.ts`
-- **Styling**: Tailwind CSS
+- **Identity**: Supabase anonymous auth in deployed environments; generated local identity in offline development
+- **Styling**: Component classes in `src/index.css`
 - **Types**: Import from `@dink-derby/shared-types`
 
 ## Local-First Pattern
@@ -19,13 +20,13 @@ All data operations follow this flow:
 1. **Write locally first** — Update Dexie immediately
 2. **Queue for sync** — Add entry to `syncOutbox` table
 3. **Read from local** — UI always reads from Dexie
-4. **Sync in background** — POST to `/sync` when online
+4. **Sync in background** — POST to `/sync` when online; apply acknowledgements, rejections, patches, and the returned cursor
 
 ### Dexie Tables
 
 ```ts
 // src/db.ts
-users, derbies, derbyParticipants, catches, chatMessages
+users, derbies, derbyParticipants, catches, chatMessages, reactions, media
 syncOutbox  // pending operations
 device      // local device identity
 ```
@@ -50,7 +51,7 @@ device      // local device identity
 1. Create in `src/components/`
 2. Use Dexie hooks (`useLiveQuery`) for reactive data
 3. Handle loading/error states
-4. Follow existing patterns in `DerbyList.tsx`, `LogCatchForm.tsx`
+4. Follow the screen and sheet patterns in `HomeScreen.tsx`, `DerbyScreen.tsx`, and `Sheets.tsx`
 
 ### Form Pattern
 
@@ -90,14 +91,15 @@ src/
   db.ts             # Dexie database setup
   components/       # UI components
   sync/             # Sync logic
-  utils/            # Helpers (device ID, etc.)
+  data/             # Local-first operations and first-run identity
+  domain/           # Pure scoring and leaderboard logic
+  lib/              # Authenticated API and Supabase clients
 ```
 
 ## Testing
 
-- Unit tests alongside components: `Component.test.tsx`
-- Test setup in `src/test/setup.ts`
-- E2E tests in `e2e/` using Playwright
+- Unit tests cover pure domain logic in `src/domain/`
+- E2E tests in `e2e/` use Playwright, including a two-browser-context sync flow
 
 ## Common Tasks
 

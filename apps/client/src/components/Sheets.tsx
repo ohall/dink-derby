@@ -1,8 +1,8 @@
 import { FormEvent, ReactNode, useEffect, useState } from 'react';
-import { Camera, Fish, HardDrive, ShieldCheck, Trophy, User as UserIcon, Waves, X } from 'lucide-react';
+import { Camera, Fish, HardDrive, Ruler, Scale, ShieldCheck, User as UserIcon, X } from 'lucide-react';
 import type { Derby, User } from '@dink-derby/shared-types';
-import { createDerby, saveCatch, updateProfile } from '../data/operations';
-import { db } from '../db';
+import { createDerby, joinDerby, saveCatch, updateProfile } from '../data/operations';
+import { scoringRuleLabel } from '../domain/leaderboard';
 
 function Sheet({ children, titleId, onClose }: { children: ReactNode; titleId: string; onClose: () => void }) {
   return (
@@ -33,8 +33,11 @@ export function CatchSheet({ derby, onClose, onSaved }: { derby: Derby; onClose:
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const value = Number(measurement);
-    if (!file || !value) return;
+    const value = measurement ? Number(measurement) : undefined;
+    if (derby.scoringMode !== 'count' && (!value || value <= 0)) {
+      setError(`Enter a valid ${derby.scoringMode}.`);
+      return;
+    }
     setSaving(true);
     setError('');
     try {
@@ -48,30 +51,34 @@ export function CatchSheet({ derby, onClose, onSaved }: { derby: Derby; onClose:
   }
 
   const unit = derby.scoringMode === 'weight' ? 'lb' : derby.scoringMode === 'count' ? 'fish' : 'in';
+  const requiresMeasurement = derby.scoringMode !== 'count';
 
   return (
     <Sheet titleId="catch-sheet-title" onClose={onClose}>
-      <p className="eyebrow">PHOTO · MEASURE · DONE</p>
       <h2 id="catch-sheet-title">Log a catch</h2>
-      <p className="sheet__intro">It saves to this phone before the network gets a vote.</p>
+      <p className="sheet__intro">One fish per entry. {scoringRuleLabel(derby)}.</p>
       <form className="field-form" onSubmit={submit}>
         <label className={`photo-picker ${preview ? 'photo-picker--filled' : ''}`}>
-          {preview ? <img src={preview} alt="Selected catch preview" /> : <><span><Camera size={27} /></span><strong>Add the proof</strong><small>Take a photo or choose one</small></>}
-          <input type="file" accept="image/*" capture="environment" onChange={(event) => setFile(event.target.files?.[0])} required />
+          {preview ? <img src={preview} alt="Selected catch preview" /> : <><span><Camera size={27} /></span><strong>Add photo <small>optional</small></strong><small>Take a photo or choose one</small></>}
+          <input type="file" accept="image/*" capture="environment" onChange={(event) => setFile(event.target.files?.[0])} />
         </label>
 
-        <div className="measurement-field">
-          <label htmlFor="catch-measurement">{derby.scoringMode === 'count' ? 'How many?' : derby.scoringMode === 'weight' ? 'Weight' : 'Length'}</label>
-          <div><input id="catch-measurement" value={measurement} onChange={(event) => setMeasurement(event.target.value)} type="number" inputMode="decimal" min="0.01" max="999" step={derby.scoringMode === 'count' ? '1' : '0.01'} placeholder={derby.scoringMode === 'count' ? '1' : '18.50'} required /><span>{unit}</span></div>
-        </div>
+        {requiresMeasurement ? (
+          <div className="measurement-field">
+            <label htmlFor="catch-measurement">{derby.scoringMode === 'weight' ? 'Weight' : 'Length'}</label>
+            <div><input id="catch-measurement" value={measurement} onChange={(event) => setMeasurement(event.target.value)} type="number" inputMode="decimal" min="0.01" max="999" step="0.01" placeholder={derby.scoringMode === 'weight' ? '2.75' : '18.50'} required /><span>{unit}</span></div>
+          </div>
+        ) : (
+          <div className="count-entry-summary"><Fish size={24} /><div><strong>1 fish</strong><small>This catch adds one fish to your total.</small></div></div>
+        )}
 
         <div className="form-grid">
           <label><span>Species <small>optional</small></span><input value={species} onChange={(event) => setSpecies(event.target.value)} placeholder="Largemouth bass" /></label>
-          <label><span>Note <small>optional</small></span><input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Where it hit, what you threw…" maxLength={500} /></label>
+          <label><span>Note <small>optional</small></span><input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Catch details" maxLength={500} /></label>
         </div>
         {error && <p className="form-error">{error}</p>}
-        <button className="button button--primary button--full button--large" type="submit" disabled={saving || !file || !measurement}>{saving ? 'Saving to this phone…' : 'Save catch'}</button>
-        <p className="durable-note"><ShieldCheck size={18} /> Photo and catch are committed together. Closing the app after this is safe.</p>
+        <button className="button button--primary button--full button--large" type="submit" disabled={saving || (requiresMeasurement && !measurement)}>{saving ? 'Saving catch…' : 'Save catch'}</button>
+        <p className="durable-note"><ShieldCheck size={18} /> Saved on this device first, then synced when online.</p>
       </form>
     </Sheet>
   );
@@ -86,6 +93,16 @@ export function CreateDerbySheet({ onClose, onCreated }: { onClose: () => void; 
   const [species, setSpecies] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const scoringOption = style === 'best_n' ? `best_${bestN === 3 ? 3 : 5}` : style;
+
+  function changeScoring(value: string) {
+    if (value === 'best_3' || value === 'best_5') {
+      setStyle('best_n');
+      setBestN(value === 'best_3' ? 3 : 5);
+      return;
+    }
+    setStyle(value as 'biggest' | 'total');
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -103,9 +120,8 @@ export function CreateDerbySheet({ onClose, onCreated }: { onClose: () => void; 
 
   return (
     <Sheet titleId="create-sheet-title" onClose={onClose}>
-      <p className="eyebrow">SET THE STAKES</p>
       <h2 id="create-sheet-title">Start a derby</h2>
-      <p className="sheet__intro">Just enough rules to prevent an argument. Probably.</p>
+      <p className="sheet__intro">Set the water, measurement, and scoring rule.</p>
       <form className="field-form" onSubmit={submit}>
         <label><span>Derby name</span><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Weekend Throwdown" required /></label>
         <label><span>Water</span><input value={water} onChange={(event) => setWater(event.target.value)} placeholder="Lake, pond, or river" required /></label>
@@ -115,17 +131,17 @@ export function CreateDerbySheet({ onClose, onCreated }: { onClose: () => void; 
           <div className="choice-cards">
             {(['length', 'weight', 'count'] as const).map((value) => (
               <button key={value} className={mode === value ? 'active' : ''} type="button" onClick={() => setMode(value)}>
-                {value === 'count' ? <Fish size={22} /> : value === 'weight' ? <Trophy size={22} /> : <Waves size={22} />}
-                <strong>{value === 'count' ? 'Fish count' : value}</strong>
+                {value === 'count' ? <Fish size={22} /> : value === 'weight' ? <Scale size={22} /> : <Ruler size={22} />}
+                <strong>{value === 'count' ? 'Fish count' : value === 'weight' ? 'Weight' : 'Length'}</strong>
               </button>
             ))}
           </div>
         </fieldset>
 
-        {mode !== 'count' && <div className="form-grid">
-          <label><span>Scoring</span><select value={style} onChange={(event) => setStyle(event.target.value as NonNullable<Derby['scoringStyle']>)}><option value="biggest">Biggest fish</option><option value="best_n">Best N fish</option><option value="total">Total measurement</option></select></label>
-          {style === 'best_n' && <label><span>Best how many?</span><input type="number" min="1" max="20" value={bestN} onChange={(event) => setBestN(Number(event.target.value))} /></label>}
-        </div>}
+        {mode !== 'count' ? <>
+          <label><span>Scoring</span><select value={scoringOption} onChange={(event) => changeScoring(event.target.value)}><option value="biggest">Biggest single fish</option><option value="best_3">Best 3 fish</option><option value="best_5">Best 5 fish</option><option value="total">Total of all fish</option></select></label>
+          <p className="rule-summary">Biggest fish is tracked separately for every {mode} derby.</p>
+        </> : <p className="rule-summary">Each catch adds exactly 1 fish. No measurement is required.</p>}
         <label><span>Species <small>optional</small></span><input value={species} onChange={(event) => setSpecies(event.target.value)} placeholder="Open species" /></label>
         {error && <p className="form-error">{error}</p>}
         <button className="button button--primary button--full button--large" type="submit" disabled={saving}>{saving ? 'Starting derby…' : 'Create derby'}</button>
@@ -137,27 +153,29 @@ export function CreateDerbySheet({ onClose, onCreated }: { onClose: () => void; 
 export function JoinDerbySheet({ onClose, onJoined }: { onClose: () => void; onJoined: (derby: Derby) => void }) {
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
+  const [joining, setJoining] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const normalized = code.trim().toUpperCase();
-    const derby = await db.derbies.where('inviteCode').equals(normalized).first();
-    if (!derby) {
-      setError('That derby is not cached on this phone. Joining a new crew requires a connection.');
-      return;
+    setJoining(true);
+    setError('');
+    try {
+      onJoined(await joinDerby(code));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'That derby could not be joined.');
+    } finally {
+      setJoining(false);
     }
-    onJoined(derby);
   }
 
   return (
     <Sheet titleId="join-sheet-title" onClose={onClose}>
-      <p className="eyebrow">MEET THE CREW</p>
       <h2 id="join-sheet-title">Join a derby</h2>
-      <p className="sheet__intro">Use the code your friend sent. Try <b>DINK-PINE</b> for the sample derby.</p>
+      <p className="sheet__intro">Enter the invite code from the derby organizer.</p>
       <form className="field-form" onSubmit={submit}>
         <label><span>Invite code</span><input className="code-input" value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} placeholder="DINK-XXXXXX" autoCapitalize="characters" required /></label>
         {error && <p className="form-error">{error}</p>}
-        <button className="button button--primary button--full button--large" type="submit">Find derby</button>
+        <button className="button button--primary button--full button--large" type="submit" disabled={joining}>{joining ? 'Joining derby…' : 'Join derby'}</button>
       </form>
     </Sheet>
   );
@@ -183,9 +201,8 @@ export function ProfileSheet({ user, onClose }: { user?: User; onClose: () => vo
 
   return (
     <Sheet titleId="profile-sheet-title" onClose={onClose}>
-      <p className="eyebrow">YOUR TACKLE BOX</p>
       <h2 id="profile-sheet-title">Angler profile</h2>
-      <p className="sheet__intro">This identity stays available even when sign-in does not.</p>
+      <p className="sheet__intro">This name appears in derbies and standings.</p>
       <form className="field-form" onSubmit={submit}>
         <div className="profile-crest"><UserIcon size={34} /></div>
         <label><span>Display name</span><input value={name} onChange={(event) => setName(event.target.value)} required /></label>

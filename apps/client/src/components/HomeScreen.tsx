@@ -23,25 +23,20 @@ function derbyTiming(derby: Derby) {
 export function HomeScreen({ user, derbies, catches, onOpenDerby, onCreate, onJoin }: HomeScreenProps) {
   return (
     <main className="home-screen page-width">
-      <section className="home-hero">
-        <div className="home-hero__copy">
-          <p className="eyebrow">FIELD NOTES · ADIRONDACKS</p>
-          <h1>Hey {user?.displayName?.split(' ')[0] || 'angler'}, the lake is calling.</h1>
-          <p>Keep the score, keep the receipts, and keep fishing when the signal disappears.</p>
-          <div className="home-hero__actions">
-            <button className="button button--primary" type="button" onClick={onCreate}><Plus size={20} /> Start a derby</button>
-            <button className="button button--paper" type="button" onClick={onJoin}><Ticket size={20} /> Join with code</button>
-          </div>
+      <section className="home-toolbar">
+        <div>
+          <h1>Derbies</h1>
+          <p>{user?.displayName || 'Angler'}</p>
         </div>
-        <div className="home-hero__terrain" aria-hidden="true" />
+        <div className="home-toolbar__actions">
+          <button className="button button--primary" type="button" onClick={onCreate}><Plus size={20} /> Start a derby</button>
+          <button className="button button--paper" type="button" onClick={onJoin}><Ticket size={20} /> Join with code</button>
+        </div>
       </section>
 
       <section className="derby-library" aria-labelledby="your-derbies-title">
         <div className="section-title-row">
-          <div>
-            <p className="eyebrow">YOUR WATER, YOUR RULES</p>
-            <h2 id="your-derbies-title">Your derbies</h2>
-          </div>
+          <h2 id="your-derbies-title">Your derbies</h2>
           <span>{derbies.length} total</span>
         </div>
 
@@ -74,8 +69,8 @@ export function HomeScreen({ user, derbies, catches, onOpenDerby, onCreate, onJo
         ) : (
           <div className="empty-card">
             <span><Fish size={42} /></span>
-            <div><h3>No derbies yet.</h3><p>Start one before the cooler gets warm.</p></div>
-            <button className="text-button" type="button" onClick={onCreate}>Create the first one <ArrowRight size={18} /></button>
+            <div><h3>No derbies yet</h3><p>Start a derby or join one with an invite code.</p></div>
+            <button className="text-button" type="button" onClick={onCreate}>Start a derby <ArrowRight size={18} /></button>
           </div>
         )}
       </section>

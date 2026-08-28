@@ -17,9 +17,17 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
-  },
+  webServer: [
+    {
+      command: 'npm run dev',
+      url: 'http://localhost:5173',
+      reuseExistingServer: !process.env.CI,
+    },
+    {
+      command: 'npm run dev -w @dink-derby/server',
+      url: 'http://localhost:3000',
+      reuseExistingServer: !process.env.CI,
+      env: process.env.TEST_DATABASE_URL ? { DATABASE_URL: process.env.TEST_DATABASE_URL } : undefined,
+    },
+  ],
 });

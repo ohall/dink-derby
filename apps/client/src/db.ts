@@ -16,7 +16,9 @@ export type LocalMedia = Media & { blob?: Blob };
 export type AppSettings = {
   id: 'app';
   currentUserId: string;
-  seededAt: string;
+  initializedAt?: string;
+  seededAt?: string;
+  authMode?: 'supabase' | 'local';
 };
 
 export type DerbySyncState = {

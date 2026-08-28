@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Catch, Derby, DerbyParticipant, User } from '@dink-derby/shared-types';
-import { buildLeaderboard } from './leaderboard';
+import { buildLeaderboard, findBiggestFish, scoringRuleLabel } from './leaderboard';
 
 const now = '2026-08-27T12:00:00.000Z';
 const users: User[] = [
@@ -71,5 +71,17 @@ describe('buildLeaderboard', () => {
       users,
     );
     expect(rows.find((row) => row.userId === 'one')).toMatchObject({ score: 19, pendingCount: 1 });
+  });
+
+  it('tracks the biggest fish separately from a best-N team score', () => {
+    const rules = derby('best_n', 3);
+    const biggest = findBiggestFish(
+      rules,
+      [fish('a', 'one', 12), fish('b', 'one', 14), fish('c', 'two', 20)],
+      participants,
+      users,
+    );
+    expect(biggest).toMatchObject({ displayName: 'Two', score: 20, item: { id: 'c' } });
+    expect(scoringRuleLabel(rules)).toBe('Best 3 fish by total length');
   });
 });

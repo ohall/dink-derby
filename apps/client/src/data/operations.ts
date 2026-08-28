@@ -11,6 +11,7 @@ import type {
 import { db, type LocalMedia } from '../db';
 import { getOrCreateDeviceId } from '../utils/device';
 import { syncService } from '../sync';
+import { joinDerbyRequest } from '../lib/api';
 
 type CreateDerbyInput = {
   name: string;
@@ -26,9 +27,9 @@ type CreateDerbyInput = {
 type SaveCatchInput = {
   derby: Derby;
   species?: string;
-  measurement: number;
+  measurement?: number;
   note?: string;
-  photo: File;
+  photo?: File;
 };
 
 function inviteCode() {
@@ -55,7 +56,7 @@ function outboxItem(
   };
 }
 
-async function currentIdentity() {
+export async function currentIdentity() {
   const settings = await db.settings.get('app');
   if (!settings) throw new Error('Dink Derby has not finished setting up this device.');
   const user = await db.users.get(settings.currentUserId);
@@ -63,8 +64,49 @@ async function currentIdentity() {
   return { user, deviceId: await getOrCreateDeviceId() };
 }
 
+export async function joinDerby(inviteCode: string) {
+  if (!navigator.onLine) throw new Error('Connect to join a new derby. It will work offline after that.');
+  const { user, deviceId } = await currentIdentity();
+  const device = await db.device.get(deviceId);
+  if (!device) throw new Error('This phone is missing its field identity.');
+  const result = await joinDerbyRequest({ inviteCode: inviteCode.trim().toUpperCase(), user, device });
+  const snapshot = result.snapshot;
+  await db.transaction(
+    'rw',
+    [db.users, db.derbies, db.derbyParticipants, db.catches, db.chatMessages, db.reactions, db.media],
+    async () => {
+      if (snapshot.users.length) await db.users.bulkPut(snapshot.users);
+      if (snapshot.derbies.length) await db.derbies.bulkPut(snapshot.derbies);
+      if (snapshot.derbyParticipants.length) await db.derbyParticipants.bulkPut(snapshot.derbyParticipants);
+      if (snapshot.catches.length) await db.catches.bulkPut(snapshot.catches);
+      if (snapshot.chatMessages.length) await db.chatMessages.bulkPut(snapshot.chatMessages);
+      if (snapshot.reactions.length) await db.reactions.bulkPut(snapshot.reactions);
+      if (snapshot.media.length) await db.media.bulkPut(snapshot.media);
+    },
+  );
+  syncService.requestSync();
+  return result.derby;
+}
+
 async function hashBlob(blob: Blob) {
-  const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
+  // Read in chunks so we don't spike mobile Safari while hashing a photo.
+  const stream = blob.stream();
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    total += value.length;
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.length;
+  }
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
@@ -75,23 +117,47 @@ async function canvasBlob(canvas: HTMLCanvasElement, type: string, quality: numb
 }
 
 async function preparePhoto(file: File): Promise<{ blob: Blob; hash: string; width?: number; height?: number }> {
-  if (!('createImageBitmap' in window)) {
+  // Mobile browsers (especially iOS Safari) can kill the tab if photo prep holds
+  // the raw decoded bitmap, the original File, and the compressed output in memory
+  // at the same time. Use <img> decode (smaller peak than createImageBitmap) and
+  // cap to a modest longest edge so a 12MP phone photo doesn't explode JS heap.
+  const longestEdge = 1600;
+  if (!('createImageBitmap' in window) || !('Blob' in window)) {
     return { blob: file, hash: await hashBlob(file) };
   }
 
-  const bitmap = await createImageBitmap(file);
-  const longestEdge = 1800;
-  const scale = Math.min(1, longestEdge / Math.max(bitmap.width, bitmap.height));
-  const width = Math.max(1, Math.round(bitmap.width * scale));
-  const height = Math.max(1, Math.round(bitmap.height * scale));
+  const url = URL.createObjectURL(file);
+  let decoded: { width: number; height: number; image: HTMLImageElement } | undefined;
+  try {
+    decoded = await new Promise<{ width: number; height: number; image: HTMLImageElement }>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight, image: img });
+      img.onerror = () => reject(new Error('The photo could not be read.'));
+      img.src = url;
+    });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+
+  const scale = Math.min(1, longestEdge / Math.max(decoded.width, decoded.height));
+  const width = Math.max(1, Math.round(decoded.width * scale));
+  const height = Math.max(1, Math.round(decoded.height * scale));
+
+  // Skip re-encode when the source is already a small JPEG — avoids another full copy.
+  if (file.type === 'image/jpeg' && scale === 1) {
+    decoded.image.src = '';
+    return { blob: file, hash: await hashBlob(file), width, height };
+  }
+
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('This browser cannot prepare the photo.');
-  context.drawImage(bitmap, 0, 0, width, height);
-  bitmap.close();
-  const blob = await canvasBlob(canvas, 'image/jpeg', 0.84);
+  context.drawImage(decoded.image, 0, 0, width, height);
+  decoded.image.src = ''; // release the decoded source as soon as the canvas holds it
+
+  const blob = await canvasBlob(canvas, 'image/jpeg', 0.82);
   return { blob, hash: await hashBlob(blob), width, height };
 }
 
@@ -140,17 +206,20 @@ export async function createDerby(input: CreateDerbyInput) {
 
 export async function saveCatch(input: SaveCatchInput) {
   const { user, deviceId } = await currentIdentity();
-  const prepared = await preparePhoto(input.photo);
+  if (input.derby.scoringMode !== 'count' && (!input.measurement || input.measurement <= 0)) {
+    throw new Error(`Enter a valid ${input.derby.scoringMode}.`);
+  }
+  const prepared = input.photo ? await preparePhoto(input.photo) : undefined;
   const now = new Date().toISOString();
   const catchId = crypto.randomUUID();
-  const mediaId = crypto.randomUUID();
-  const media: LocalMedia = {
+  const mediaId = prepared ? crypto.randomUUID() : undefined;
+  const media: LocalMedia | undefined = prepared && mediaId ? {
     id: mediaId,
     ownerId: user.id,
     derbyId: input.derby.id,
     catchId,
     contentHash: prepared.hash,
-    contentType: prepared.blob.type || input.photo.type || 'image/jpeg',
+    contentType: prepared.blob.type || input.photo?.type || 'image/jpeg',
     sizeBytes: prepared.blob.size,
     width: prepared.width,
     height: prepared.height,
@@ -159,7 +228,7 @@ export async function saveCatch(input: SaveCatchInput) {
     clientId: deviceId,
     isPendingSync: true,
     blob: prepared.blob,
-  };
+  } : undefined;
   const item: Catch = {
     id: catchId,
     derbyId: input.derby.id,
@@ -167,7 +236,7 @@ export async function saveCatch(input: SaveCatchInput) {
     species: input.species?.trim() || undefined,
     lengthInInches: input.derby.scoringMode === 'length' ? input.measurement : undefined,
     weightInPounds: input.derby.scoringMode === 'weight' ? input.measurement : undefined,
-    count: input.derby.scoringMode === 'count' ? Math.max(1, Math.round(input.measurement)) : 1,
+    count: 1,
     photoMediaId: mediaId,
     note: input.note?.trim() || undefined,
     caughtAt: now,
@@ -176,16 +245,15 @@ export async function saveCatch(input: SaveCatchInput) {
     clientId: deviceId,
     isPendingSync: true,
   };
-  const mediaPayload: Media = { ...media };
-  delete (mediaPayload as LocalMedia).blob;
+  const mediaPayload: Media | undefined = media ? { ...media } : undefined;
+  if (mediaPayload) delete (mediaPayload as LocalMedia).blob;
 
   await db.transaction('rw', [db.catches, db.media, db.syncOutbox], async () => {
     await db.catches.add(item);
-    await db.media.add(media);
-    await db.syncOutbox.bulkAdd([
-      outboxItem('catch', item.id, item, 'create', input.derby.id),
-      outboxItem('media', media.id, mediaPayload, 'create', input.derby.id),
-    ]);
+    if (media) await db.media.add(media);
+    const operations = [outboxItem('catch', item.id, item, 'create', input.derby.id)];
+    if (media && mediaPayload) operations.push(outboxItem('media', media.id, mediaPayload, 'create', input.derby.id));
+    await db.syncOutbox.bulkAdd(operations);
   });
 
   syncService.requestSync();

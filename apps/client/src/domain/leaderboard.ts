@@ -9,6 +9,12 @@ export type LeaderboardRow = {
   bestCatch?: Catch;
 };
 
+export type BiggestFish = {
+  item: Catch;
+  displayName: string;
+  score: number;
+};
+
 export function catchScore(derby: Derby, item: Catch): number {
   if (derby.scoringMode === 'weight') return item.weightInPounds ?? 0;
   if (derby.scoringMode === 'count') return item.count;
@@ -52,6 +58,34 @@ export function buildLeaderboard(
       };
     })
     .sort((a, b) => b.score - a.score || b.catchCount - a.catchCount || a.displayName.localeCompare(b.displayName));
+}
+
+export function findBiggestFish(
+  derby: Derby,
+  catches: Catch[],
+  participants: DerbyParticipant[],
+  users: User[],
+): BiggestFish | undefined {
+  if (derby.scoringMode === 'count') return undefined;
+  const participantByUserId = new Map(participants.map((participant) => [participant.userId, participant]));
+  const userById = new Map(users.map((user) => [user.id, user]));
+  const item = catches
+    .filter((candidate) => candidate.derbyId === derby.id && !candidate.deletedAt && catchScore(derby, candidate) > 0)
+    .sort((a, b) => catchScore(derby, b) - catchScore(derby, a))[0];
+  if (!item) return undefined;
+  return {
+    item,
+    displayName: participantByUserId.get(item.userId)?.nickname || userById.get(item.userId)?.displayName || 'Unknown angler',
+    score: catchScore(derby, item),
+  };
+}
+
+export function scoringRuleLabel(derby: Derby): string {
+  if (derby.scoringMode === 'count') return 'Most fish';
+  const measurement = derby.scoringMode === 'weight' ? 'weight' : 'length';
+  if (derby.scoringStyle === 'best_n') return `Best ${derby.bestN ?? 5} fish by total ${measurement}`;
+  if (derby.scoringStyle === 'total') return `Total ${measurement} of all fish`;
+  return `Biggest fish by ${measurement}`;
 }
 
 export function scoringLabel(derby: Derby): string {

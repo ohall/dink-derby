@@ -1,6 +1,7 @@
 import type { SyncOutboxItem, SyncRequest, SyncResponse } from '@dink-derby/shared-types';
 import { db } from '../db';
 import { getOrCreateDeviceId } from '../utils/device';
+import { apiFetch, uploadMedia } from '../lib/api';
 
 export type SyncPhase = 'idle' | 'syncing' | 'offline' | 'error';
 
@@ -11,7 +12,6 @@ export type SyncSnapshot = {
   message: string;
 };
 
-const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/$/, '');
 const SYNC_INTERVAL_MS = 15_000;
 
 class SyncService {
@@ -20,6 +20,7 @@ class SyncService {
   private interval?: number;
   private debounce?: number;
   private syncing = false;
+  private syncRequested = false;
   private started = false;
 
   subscribe = (listener: () => void) => {
@@ -60,9 +61,16 @@ class SyncService {
   }
 
   requestSync() {
+    this.syncRequested = true;
     void this.refreshPendingCount();
     if (this.debounce) window.clearTimeout(this.debounce);
     this.debounce = window.setTimeout(() => void this.sync(), 250);
+  }
+
+  async retry() {
+    const failed = await db.syncOutbox.where('status').equals('failed').toArray();
+    await Promise.all(failed.map((item) => db.syncOutbox.update(item.id, { status: 'pending', lastError: undefined })));
+    await this.sync();
   }
 
   private handleReconnect = () => void this.sync();
@@ -80,8 +88,21 @@ class SyncService {
     if (ids.length) await db.syncOutbox.bulkDelete(ids);
   }
 
+  private async uploadPendingMedia() {
+    const candidates = await db.media.filter((item) => Boolean(item.blob) && !item.remoteUrl).toArray();
+    for (const media of candidates) {
+      if (!media.blob) continue;
+      const path = await uploadMedia(media.id, media.contentType, media.blob);
+      if (path) await db.media.update(media.id, { remoteUrl: path, isPendingSync: false });
+    }
+  }
+
   async sync() {
-    if (this.syncing) return;
+    if (this.syncing) {
+      this.syncRequested = true;
+      return;
+    }
+    this.syncRequested = false;
     await this.refreshPendingCount();
 
     if (!navigator.onLine) {
@@ -95,20 +116,25 @@ class SyncService {
 
     try {
       const deviceId = await getOrCreateDeviceId();
+      const settings = await db.settings.get('app');
+      if (!settings) throw new Error('This phone is missing its Dink Derby identity.');
       const syncState = await db.syncState.get('_global');
-      const outbox = await db.syncOutbox.orderBy('createdAt').toArray();
+      const queued = await db.syncOutbox.orderBy('createdAt').toArray();
+      const priority: Record<SyncOutboxItem['entityType'], number> = { user: 0, device: 1, derby: 2, derbyParticipant: 3, catch: 4, media: 5, chatMessage: 6, reaction: 7 };
+      const outbox = queued
+        .filter((item) => item.status !== 'failed')
+        .sort((a, b) => priority[a.entityType] - priority[b.entityType] || a.createdAt.localeCompare(b.createdAt));
       const request: SyncRequest = {
         clientId: deviceId,
+        userId: settings.currentUserId,
         cursor: syncState?.cursor,
         lastSyncedAt: syncState?.lastSuccessAt,
         outbox,
       };
-      const response = await fetch(`${API_URL}/sync`, {
+      const response = await apiFetch('/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request),
       });
-      if (!response.ok) throw new Error(`Derby server returned ${response.status}`);
       const data = (await response.json()) as SyncResponse;
       const patches = {
         ...data.patches,
@@ -121,6 +147,10 @@ class SyncService {
         [db.users, db.derbies, db.derbyParticipants, db.catches, db.chatMessages, db.reactions, db.media, db.syncOutbox, db.syncState],
         async () => {
           await this.markAcknowledged(outbox, data.appliedOperationIds);
+          await Promise.all(data.rejected.map((rejection) => db.syncOutbox.update(rejection.operationId, {
+            status: 'failed',
+            lastError: `${rejection.code}: ${rejection.message}`,
+          })));
           if (patches.users.length) await db.users.bulkPut(patches.users);
           if (patches.derbies.length) await db.derbies.bulkPut(patches.derbies);
           if (patches.derbyParticipants.length) await db.derbyParticipants.bulkPut(patches.derbyParticipants);
@@ -135,7 +165,13 @@ class SyncService {
         },
       );
 
+      await this.uploadPendingMedia();
+
       await this.refreshPendingCount();
+      if (data.rejected.length) {
+        this.publish({ phase: 'error', message: `${data.rejected.length} change${data.rejected.length === 1 ? '' : 's'} need attention` });
+        return;
+      }
       this.publish({
         phase: 'idle',
         lastSuccessAt: data.serverTime,
@@ -143,13 +179,13 @@ class SyncService {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Sync failed';
-      const pending = await db.syncOutbox.toArray();
+      const pending = await db.syncOutbox.where('status').notEqual('failed').toArray();
       await db.transaction('rw', [db.syncOutbox, db.syncState], async () => {
         await Promise.all(
           pending.map((item) =>
             db.syncOutbox.update(item.id, {
               attempts: (item.attempts ?? 0) + 1,
-              status: 'failed',
+              status: 'pending',
               lastError: message,
             }),
           ),
@@ -163,6 +199,7 @@ class SyncService {
       });
     } finally {
       this.syncing = false;
+      if (this.syncRequested) window.setTimeout(() => void this.sync(), 0);
     }
   }
 }

@@ -6,7 +6,7 @@ import { HomeScreen } from './components/HomeScreen';
 import { DerbyScreen } from './components/DerbyScreen';
 import { CatchSheet, CreateDerbySheet, JoinDerbySheet, ProfileSheet } from './components/Sheets';
 import { db } from './db';
-import { seedFieldDemo } from './data/seed';
+import { initializeIdentity } from './data/identity';
 import { syncService } from './sync';
 
 type SheetName = 'create' | 'join' | 'profile' | 'catch' | null;
@@ -27,18 +27,19 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
-    seedFieldDemo()
-      .then(async () => {
+    initializeIdentity()
+      .then(async ({ isNew }) => {
         if ('storage' in navigator && navigator.storage.persist) {
           await navigator.storage.persist().catch(() => false);
         }
         if (!active) return;
         syncService.start();
+        if (isNew) setSheet('profile');
         setReady(true);
       })
       .catch((error) => {
         if (!active) return;
-        setFatalError(error instanceof Error ? error.message : 'Dink Derby could not open its field storage.');
+        setFatalError(error instanceof Error ? error.message : 'Dink Derby could not open local storage.');
       });
     return () => {
       active = false;
@@ -47,11 +48,11 @@ export default function App() {
   }, []);
 
   if (fatalError) {
-    return <main className="fatal-screen"><Fish size={52} /><h1>We snagged a branch.</h1><p>{fatalError}</p><button className="button button--primary" type="button" onClick={() => window.location.reload()}>Try again</button></main>;
+    return <main className="fatal-screen"><Fish size={52} /><h1>Dink Derby could not open</h1><p>{fatalError}</p><button className="button button--primary" type="button" onClick={() => window.location.reload()}>Try again</button></main>;
   }
 
   if (!ready || !settings) {
-    return <main className="loading-screen"><span><Fish size={42} /></span><p>Putting the dinks on the board…</p></main>;
+    return <main className="loading-screen"><span><Fish size={42} /></span><p>Loading Dink Derby…</p></main>;
   }
 
   return (
@@ -63,8 +64,6 @@ export default function App() {
       ) : (
         <HomeScreen user={user} derbies={derbies} catches={catches} onOpenDerby={setSelectedDerbyId} onCreate={() => setSheet('create')} onJoin={() => setSheet('join')} />
       )}
-
-      <footer className="site-footer page-width"><strong>DINKDERBY.COM</strong><span>Built for bad service and good stories.</span></footer>
 
       {sheet === 'create' && <CreateDerbySheet onClose={() => setSheet(null)} onCreated={(derby) => { setSelectedDerbyId(derby.id); setSheet(null); }} />}
       {sheet === 'join' && <JoinDerbySheet onClose={() => setSheet(null)} onJoined={(derby) => { setSelectedDerbyId(derby.id); setSheet(null); }} />}

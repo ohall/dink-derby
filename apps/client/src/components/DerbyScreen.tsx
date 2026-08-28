@@ -19,10 +19,11 @@ import {
 } from 'lucide-react';
 import type { Catch, Derby, User } from '@dink-derby/shared-types';
 import { db } from '../db';
-import { buildLeaderboard, formatScore, scoringLabel } from '../domain/leaderboard';
+import { buildLeaderboard, findBiggestFish, formatScore, scoringLabel, scoringRuleLabel, type BiggestFish } from '../domain/leaderboard';
 import { sendMessage, toggleReaction } from '../data/operations';
 import { useSyncStatus } from '../sync/useSyncStatus';
 import { syncService } from '../sync';
+import { getMediaDownloadUrl } from '../lib/api';
 
 type DerbyScreenProps = {
   derby: Derby;
@@ -56,18 +57,28 @@ function LocalPhoto({ mediaId, alt }: { mediaId?: string; alt: string }) {
   const [url, setUrl] = useState('');
 
   useEffect(() => {
-    if (!media?.blob) {
-      setUrl(media?.remoteUrl ?? '');
-      return;
+    let active = true;
+    let objectUrl = '';
+    if (media?.blob) {
+      objectUrl = URL.createObjectURL(media.blob);
+      setUrl(objectUrl);
+    } else if (media?.remoteUrl && mediaId) {
+      getMediaDownloadUrl(mediaId).then((next) => {
+        if (active) setUrl(next);
+      }).catch(() => {
+        if (active) setUrl('');
+      });
+    } else {
+      setUrl('');
     }
-    const next = URL.createObjectURL(media.blob);
-    setUrl(next);
-    return () => URL.revokeObjectURL(next);
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
   }, [media]);
 
-  if (!url) {
-    return <div className="catch-photo catch-photo--fallback" role="img" aria-label={alt}><Fish size={72} strokeWidth={1.4} /><span>PHOTO SAVED WITH CATCH</span></div>;
-  }
+  if (!mediaId) return null;
+  if (!url) return <div className="catch-photo catch-photo--fallback" role="img" aria-label={alt}><Fish size={54} strokeWidth={1.4} /><span>PHOTO UNAVAILABLE</span></div>;
   return <img className="catch-photo" src={url} alt={alt} />;
 }
 
@@ -84,6 +95,7 @@ export function DerbyScreen({ derby, currentUser, onBack, onLogCatch }: DerbyScr
   const reactions = useLiveQuery(() => db.reactions.where('derbyId').equals(derby.id).toArray(), [derby.id]) ?? [];
   const userById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
   const leaderboard = useMemo(() => buildLeaderboard(derby, catches, participants, users), [derby, catches, participants, users]);
+  const biggestFish = useMemo(() => findBiggestFish(derby, catches, participants, users), [derby, catches, participants, users]);
 
   useEffect(() => {
     const interval = window.setInterval(() => forceClock((value) => value + 1), 60_000);
@@ -137,17 +149,17 @@ export function DerbyScreen({ derby, currentUser, onBack, onLogCatch }: DerbyScr
           </div>
         </div>
         <div className="derby-banner__leader">
-          <span className="leader-kicker"><Trophy size={17} /> CURRENT MARK</span>
+          <span className="leader-kicker"><Trophy size={17} /> LEADER</span>
           <strong>{leaderboard[0] ? formatScore(derby, leaderboard[0].score) : '—'}<small>{scoringLabel(derby)}</small></strong>
-          <p>{leaderboard[0]?.displayName || 'Waiting for the first fish'}</p>
+          <p>{leaderboard[0]?.displayName || 'No catches yet'}</p>
           <button className="button button--coral" type="button" onClick={onLogCatch}><Camera size={20} /> Log a catch</button>
         </div>
       </section>
 
       <div className={`field-status field-status--${sync.phase}`}>
         <span>{sync.phase === 'idle' && !sync.pendingCount ? <Check size={17} /> : <ShieldCheck size={17} />}</span>
-        <p><strong>{sync.message}</strong>{sync.pendingCount ? ` · ${sync.pendingCount} item${sync.pendingCount === 1 ? '' : 's'} waiting` : ' · local-first protection is on'}</p>
-        {sync.phase === 'error' && <button type="button" onClick={() => void syncService.sync()}>Try again</button>}
+        <p><strong>{sync.message}</strong>{sync.pendingCount ? ` · ${sync.pendingCount} item${sync.pendingCount === 1 ? '' : 's'} waiting` : ''}</p>
+        {sync.phase === 'error' && <button type="button" onClick={() => void syncService.retry()}>Try again</button>}
       </div>
 
       <nav className="derby-tabs" aria-label="Derby sections">
@@ -160,7 +172,7 @@ export function DerbyScreen({ derby, currentUser, onBack, onLogCatch }: DerbyScr
         <section className="feed-layout">
           <div className="feed-column">
             <div className="section-title-row section-title-row--compact">
-              <div><p className="eyebrow">THE LAKE IS TALKING</p><h2>Derby feed</h2></div>
+              <h2>Derby feed</h2>
               <button className="button button--primary button--small" type="button" onClick={onLogCatch}><Camera size={18} /> Log catch</button>
             </div>
 
@@ -188,7 +200,7 @@ export function DerbyScreen({ derby, currentUser, onBack, onLogCatch }: DerbyScr
                     </header>
                     <LocalPhoto mediaId={item.photoMediaId} alt={`${item.species || 'Fish'} logged by ${author}`} />
                     <div className="catch-card__body">
-                      <div><p className="fish-species">{item.species || 'Mystery fish'}</p><p>{item.note || 'No secrets shared.'}</p></div>
+                      <div><p className="fish-species">{item.species || 'Fish'}</p>{item.note && <p>{item.note}</p>}</div>
                       <strong className="catch-measure">{measure ?? '—'}<small>{scoringLabel(derby)}</small></strong>
                     </div>
                     <footer>
@@ -198,17 +210,17 @@ export function DerbyScreen({ derby, currentUser, onBack, onLogCatch }: DerbyScr
                   </article>
                 );
               })}
-            </div> : <div className="empty-feed"><Fish size={42} /><h3>Be the first to make waves.</h3></div>}
+            </div> : <div className="empty-feed"><Fish size={42} /><h3>No catches or messages yet</h3></div>}
 
             <form className="chat-composer" onSubmit={submitMessage}>
               <label className="sr-only" htmlFor="derby-chat">Message the derby</label>
-              <input id="derby-chat" value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Talk a little trash…" maxLength={300} />
+              <input id="derby-chat" value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Message the derby" maxLength={300} />
               <button type="submit" aria-label="Send message"><Send size={18} /></button>
             </form>
           </div>
 
           <aside className="standings-peek">
-            <div><p className="eyebrow">TOP OF THE BOARD</p><h2>Standings</h2></div>
+            <h2>Standings</h2>
             <Leaderboard derby={derby} rows={leaderboard} currentUserId={currentUser?.id} />
             <button className="text-button" type="button" onClick={() => setTab('standings')}>See full standings</button>
           </aside>
@@ -217,19 +229,23 @@ export function DerbyScreen({ derby, currentUser, onBack, onLogCatch }: DerbyScr
 
       {tab === 'standings' && (
         <section className="single-panel standings-full">
-          <div className="section-title-row"><div><p className="eyebrow">PROVISIONAL WHILE OFFLINE</p><h2>Leaderboard</h2></div><span>{scoringLabel(derby).toUpperCase()}</span></div>
+          <div className="section-title-row"><h2>Leaderboard</h2><span>{scoringRuleLabel(derby)}</span></div>
+          {biggestFish && <BiggestFishCard derby={derby} biggest={biggestFish} />}
           <Leaderboard derby={derby} rows={leaderboard} currentUserId={currentUser?.id} detailed />
         </section>
       )}
 
       {tab === 'rules' && (
         <section className="single-panel rules-panel">
-          <div><p className="eyebrow">THE FINE PRINT</p><h2>Derby rules</h2></div>
+          <div><h2>Derby rules</h2></div>
           <div className="rule-grid">
-            <Rule icon={derby.scoringMode === 'weight' ? <Scale /> : <Ruler />} label="Measurement" value={`${derby.scoringMode} · ${scoringLabel(derby)}`} />
-            <Rule icon={<Trophy />} label="Scoring" value={derby.scoringStyle === 'best_n' ? `Best ${derby.bestN ?? 5} catches` : derby.scoringStyle === 'total' ? 'Total of all catches' : 'Biggest single fish'} />
+            <Rule icon={derby.scoringMode === 'weight' ? <Scale /> : derby.scoringMode === 'length' ? <Ruler /> : <Fish />} label="Measurement" value={derby.scoringMode === 'count' ? 'No measurement required' : `${derby.scoringMode === 'weight' ? 'Weight' : 'Length'} · ${scoringLabel(derby)}`} />
+            <Rule icon={<Trophy />} label="Scoring" value={scoringRuleLabel(derby)} />
+            <Rule icon={<Fish />} label="Catch entry" value="One fish per entry" />
+            {derby.scoringMode !== 'count' && <Rule icon={<Scale />} label="Biggest fish" value="Tracked separately in standings" />}
             <Rule icon={<Fish />} label="Species" value={derby.speciesFilter || 'Open species'} />
-            <Rule icon={<ShieldCheck />} label="Offline catches" value="Allowed · marked provisional until synced" />
+            <Rule icon={<Camera />} label="Photo" value="Optional" />
+            <Rule icon={<ShieldCheck />} label="Offline catches" value="Saved locally until synced" />
           </div>
         </section>
       )}
@@ -237,6 +253,16 @@ export function DerbyScreen({ derby, currentUser, onBack, onLogCatch }: DerbyScr
       <button className="floating-catch-button" type="button" onClick={onLogCatch}><Camera size={20} /> Log catch</button>
       {toast && <div className="toast" role="status">{toast}</div>}
     </main>
+  );
+}
+
+function BiggestFishCard({ derby, biggest }: { derby: Derby; biggest: BiggestFish }) {
+  return (
+    <div className="biggest-fish-card">
+      <span><Fish size={25} /></span>
+      <div><small>Biggest fish</small><strong>{biggest.displayName}</strong><p>{biggest.item.species || 'Fish'}</p></div>
+      <strong>{formatScore(derby, biggest.score)}<small>{scoringLabel(derby)}</small></strong>
+    </div>
   );
 }
 

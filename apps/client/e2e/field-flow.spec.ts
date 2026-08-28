@@ -11,7 +11,7 @@ test('creates a derby with a deterministic scoring rule', async ({ page }) => {
   await page.goto('/');
   await finishOnboarding(page, 'Oakley');
 
-  await page.getByRole('button', { name: /start a derby/i }).click();
+  await page.getByRole('button', { name: /start a derby/i }).first().click();
   await page.getByLabel('Derby name').fill('Little Tupper Classic');
   await page.getByLabel('Water').fill('Little Tupper Lake');
   await page.getByRole('button', { name: 'length', exact: true }).click();
@@ -26,7 +26,7 @@ test('creates a derby with a deterministic scoring rule', async ({ page }) => {
 test('logs exactly one fish in a count derby without requiring a measurement or photo', async ({ page }) => {
   await page.goto('/');
   await finishOnboarding(page, 'Count Angler');
-  await page.getByRole('button', { name: /start a derby/i }).click();
+  await page.getByRole('button', { name: /start a derby/i }).first().click();
   await page.getByLabel('Derby name').fill('One Fish At A Time');
   await page.getByLabel('Water').fill('Test Pond');
   await page.getByRole('button', { name: /fish count/i }).click();
@@ -43,7 +43,7 @@ test('logs exactly one fish in a count derby without requiring a measurement or 
 test('saves a catch with its photo while offline and restores it after reload', async ({ page, context }) => {
   await page.goto('/');
   await finishOnboarding(page, 'Offline Angler');
-  await page.getByRole('button', { name: /start a derby/i }).click();
+  await page.getByRole('button', { name: /start a derby/i }).first().click();
   await page.getByLabel('Derby name').fill('Offline Throwdown');
   await page.getByLabel('Water').fill('Little Tupper Lake');
   await page.getByRole('button', { name: /create derby/i }).click();

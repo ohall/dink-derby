@@ -15,7 +15,7 @@ test('two anglers create, join, and share a catch through the server', async ({ 
   const joiner = await joinerContext.newPage();
 
   await onboard(creator, 'Creator Angler');
-  await creator.getByRole('button', { name: /start a derby/i }).click();
+  await creator.getByRole('button', { name: /start a derby/i }).first().click();
   await creator.getByLabel('Derby name').fill('Two Phone Throwdown');
   await creator.getByLabel('Water').fill('Test Lake');
   await creator.getByRole('button', { name: /fish count/i }).click();

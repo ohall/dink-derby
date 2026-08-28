@@ -286,7 +286,7 @@ export async function toggleReaction(
   derbyId: string,
   targetType: Reaction['targetType'],
   targetId: string,
-  reactionKind: Reaction['reaction'] = 'fire',
+  reactionKind: Reaction['reaction'],
 ) {
   const { user, deviceId } = await currentIdentity();
   const existing = await db.reactions

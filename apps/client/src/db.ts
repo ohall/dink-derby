@@ -13,6 +13,17 @@ import type {
 
 export type LocalMedia = Media & { blob?: Blob };
 
+export type DerbyEventEntry = {
+  id: string;
+  derbyId: string;
+  sequence: number;
+  entityType?: string;
+  entityId?: string;
+  type: string;
+  payload?: unknown;
+  serverCreatedAt: string;
+};
+
 export type AppSettings = {
   id: 'app';
   currentUserId: string;
@@ -41,6 +52,7 @@ export class DinkDerbyDatabase extends Dexie {
   device!: Table<Device, string>;
   settings!: Table<AppSettings, string>;
   syncState!: Table<DerbySyncState, string>;
+  derbyEvents!: Table<DerbyEventEntry, string>;
 
   constructor() {
     // A fresh database name intentionally separates this rebuild from the legacy client.
@@ -58,6 +70,10 @@ export class DinkDerbyDatabase extends Dexie {
       device: 'id',
       settings: 'id',
       syncState: 'derbyId',
+    });
+
+    this.version(2).stores({
+      derbyEvents: 'id, derbyId, sequence',
     });
   }
 }

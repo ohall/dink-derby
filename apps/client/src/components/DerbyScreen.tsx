@@ -8,6 +8,7 @@ import {
   Copy,
   Fish,
   Flame,
+  Laugh,
   MapPin,
   MessageCircle,
   Ruler,
@@ -17,7 +18,7 @@ import {
   Trophy,
   Users,
 } from 'lucide-react';
-import type { Catch, Derby, User } from '@dink-derby/shared-types';
+import type { Catch, Derby, Reaction, User } from '@dink-derby/shared-types';
 import { db } from '../db';
 import { buildLeaderboard, findBiggestFish, formatScore, scoringLabel, scoringRuleLabel, type BiggestFish } from '../domain/leaderboard';
 import { sendMessage, toggleReaction } from '../data/operations';
@@ -52,6 +53,48 @@ function initials(name: string) {
   return name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 }
 
+const REACTION_KINDS: Reaction['reaction'][] = ['fire', 'fish', 'laugh', 'trophy'];
+
+function ReactionIcon({ kind, reacted }: { kind: Reaction['reaction']; reacted: boolean }) {
+  const size = 15;
+  const fill = reacted ? 'currentColor' : 'none';
+  switch (kind) {
+    case 'fire': return <Flame size={size} fill={fill} />;
+    case 'fish': return <Fish size={size} fill={fill} />;
+    case 'laugh': return <Laugh size={size} fill={fill} />;
+    case 'trophy': return <Trophy size={size} fill={fill} />;
+  }
+}
+
+function ReactionBar({ derbyId, targetType, targetId, reactions, currentUserId }: {
+  derbyId: string;
+  targetType: Reaction['targetType'];
+  targetId: string;
+  reactions: Reaction[];
+  currentUserId?: string;
+}) {
+  return (
+    <div className="reaction-bar">
+      {REACTION_KINDS.map((kind) => {
+        const list = reactions.filter((reaction) => reaction.targetId === targetId && reaction.reaction === kind);
+        const reacted = reactions.some((reaction) => reaction.targetId === targetId && reaction.userId === currentUserId && reaction.reaction === kind);
+        return (
+          <button
+            key={kind}
+            className={reacted ? 'reacted' : ''}
+            type="button"
+            aria-label={`${kind} reaction`}
+            onClick={() => void toggleReaction(derbyId, targetType, targetId, kind)}
+          >
+            <ReactionIcon kind={kind} reacted={reacted} />
+            {list.length > 0 && <span>{list.length}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function LocalPhoto({ mediaId, alt }: { mediaId?: string; alt: string }) {
   const media = useLiveQuery(() => (mediaId ? db.media.get(mediaId) : undefined), [mediaId]);
   const [url, setUrl] = useState('');
@@ -83,7 +126,7 @@ function LocalPhoto({ mediaId, alt }: { mediaId?: string; alt: string }) {
 }
 
 export function DerbyScreen({ derby, currentUser, onBack, onLogCatch }: DerbyScreenProps) {
-  const [tab, setTab] = useState<'feed' | 'standings' | 'rules'>('feed');
+  const [tab, setTab] = useState<'feed' | 'standings' | 'activity' | 'rules'>('feed');
   const [message, setMessage] = useState('');
   const [toast, setToast] = useState('');
   const [, forceClock] = useState(0);
@@ -93,6 +136,7 @@ export function DerbyScreen({ derby, currentUser, onBack, onLogCatch }: DerbyScr
   const catches = useLiveQuery(() => db.catches.where('derbyId').equals(derby.id).reverse().sortBy('caughtAt'), [derby.id]) ?? [];
   const messages = useLiveQuery(() => db.chatMessages.where('derbyId').equals(derby.id).reverse().sortBy('sentAt'), [derby.id]) ?? [];
   const reactions = useLiveQuery(() => db.reactions.where('derbyId').equals(derby.id).toArray(), [derby.id]) ?? [];
+  const events = useLiveQuery(() => db.derbyEvents.where('derbyId').equals(derby.id).reverse().sortBy('sequence'), [derby.id]) ?? [];
   const userById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
   const leaderboard = useMemo(() => buildLeaderboard(derby, catches, participants, users), [derby, catches, participants, users]);
   const biggestFish = useMemo(() => findBiggestFish(derby, catches, participants, users), [derby, catches, participants, users]);
@@ -165,6 +209,7 @@ export function DerbyScreen({ derby, currentUser, onBack, onLogCatch }: DerbyScr
       <nav className="derby-tabs" aria-label="Derby sections">
         <button type="button" className={tab === 'feed' ? 'active' : ''} onClick={() => setTab('feed')}><MessageCircle size={18} /> Feed</button>
         <button type="button" className={tab === 'standings' ? 'active' : ''} onClick={() => setTab('standings')}><Trophy size={18} /> Standings</button>
+        <button type="button" className={tab === 'activity' ? 'active' : ''} onClick={() => setTab('activity')}><Clock3 size={18} /> Activity</button>
         <button type="button" className={tab === 'rules' ? 'active' : ''} onClick={() => setTab('rules')}><Ruler size={18} /> Rules</button>
       </nav>
 
@@ -183,13 +228,15 @@ export function DerbyScreen({ derby, currentUser, onBack, onLogCatch }: DerbyScr
                   return (
                     <article className="message-card" key={entry.item.id}>
                       <span className="mini-avatar mini-avatar--lake">{initials(author)}</span>
-                      <div><p><strong>{author}</strong> {entry.item.text}</p><small>{relativeTime(entry.item.sentAt)} {entry.item.isPendingSync ? '· saved here' : ''}</small></div>
+                      <div>
+                        <p><strong>{author}</strong> {entry.item.text}</p>
+                        <small>{relativeTime(entry.item.sentAt)} {entry.item.isPendingSync ? '· saved here' : ''}</small>
+                        <ReactionBar derbyId={derby.id} targetType="chatMessage" targetId={entry.item.id} reactions={reactions} currentUserId={currentUser?.id} />
+                      </div>
                     </article>
                   );
                 }
                 const item = entry.item as Catch;
-                const fireCount = reactions.filter((reaction) => reaction.targetId === item.id && reaction.reaction === 'fire').length;
-                const reacted = reactions.some((reaction) => reaction.targetId === item.id && reaction.userId === currentUser?.id && reaction.reaction === 'fire');
                 const measure = derby.scoringMode === 'weight' ? item.weightInPounds : derby.scoringMode === 'count' ? item.count : item.lengthInInches;
                 return (
                   <article className="catch-card" key={item.id}>
@@ -204,7 +251,7 @@ export function DerbyScreen({ derby, currentUser, onBack, onLogCatch }: DerbyScr
                       <strong className="catch-measure">{measure ?? '—'}<small>{scoringLabel(derby)}</small></strong>
                     </div>
                     <footer>
-                      <button className={reacted ? 'reacted' : ''} type="button" onClick={() => void toggleReaction(derby.id, 'catch', item.id)}><Flame size={17} fill={reacted ? 'currentColor' : 'none'} /> {fireCount || 'Cheer'}</button>
+                      <ReactionBar derbyId={derby.id} targetType="catch" targetId={item.id} reactions={reactions} currentUserId={currentUser?.id} />
                       <span>{item.isPendingSync ? 'Provisional score' : 'Counts in standings'}</span>
                     </footer>
                   </article>
@@ -232,6 +279,21 @@ export function DerbyScreen({ derby, currentUser, onBack, onLogCatch }: DerbyScr
           <div className="section-title-row"><h2>Leaderboard</h2><span>{scoringRuleLabel(derby)}</span></div>
           {biggestFish && <BiggestFishCard derby={derby} biggest={biggestFish} />}
           <Leaderboard derby={derby} rows={leaderboard} currentUserId={currentUser?.id} detailed />
+        </section>
+      )}
+
+      {tab === 'activity' && (
+        <section className="single-panel activity-panel">
+          <div className="section-title-row"><h2>Derby activity</h2><span>{events.length} event{events.length === 1 ? '' : 's'}</span></div>
+          {events.length ? (
+            <div className="activity-list">
+              {events.map((event) => (
+                <ActivityRow key={event.id} event={event} userById={userById} />
+              ))}
+            </div>
+          ) : (
+            <div className="empty-feed"><Clock3 size={42} /><h3>No activity yet</h3><p>Catches, reactions, and chat will show up here.</p></div>
+          )}
         </section>
       )}
 
@@ -283,4 +345,33 @@ function Leaderboard({ derby, rows, currentUserId, detailed = false }: { derby: 
 
 function Rule({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return <div className="rule-card"><span>{icon}</span><p><small>{label}</small><strong>{value}</strong></p></div>;
+}
+
+function ActivityRow({ event, userById }: { event: import('../db').DerbyEventEntry; userById: Map<string, User> }) {
+  const payload = event.payload as { userId?: string; displayName?: string; species?: string; lengthInInches?: number; weightInPounds?: number; count?: number; text?: string; reaction?: string } | undefined;
+  const userName = payload?.userId ? userById.get(payload.userId)?.displayName || 'Someone' : 'Someone';
+
+  let text = '';
+  if (event.type === 'catch.create') {
+    const species = payload?.species || 'a fish';
+    const measure = payload?.lengthInInches ? `${payload.lengthInInches} in` : payload?.weightInPounds ? `${payload.weightInPounds} lb` : payload?.count ? `${payload.count} fish` : '';
+    text = `${userName} logged ${species}${measure ? ` at ${measure}` : ''}`;
+  } else if (event.type === 'chatMessage.create') {
+    text = `${userName} said "${payload?.text ?? '…'}"`;
+  } else if (event.type === 'reaction.create') {
+    text = `${userName} reacted with ${payload?.reaction ?? 'a reaction'}`;
+  } else if (event.type === 'derby.create') {
+    text = `${userName} started this derby`;
+  } else if (event.type === 'derbyParticipant.create') {
+    text = `${userName} joined the derby`;
+  } else {
+    text = event.type;
+  }
+
+  return (
+    <div className="activity-row">
+      <small>{relativeTime(event.serverCreatedAt)}</small>
+      <p>{text}</p>
+    </div>
+  );
 }

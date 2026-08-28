@@ -22,6 +22,8 @@ class SyncService {
   private syncing = false;
   private syncRequested = false;
   private started = false;
+  private unseenCount = 0;
+  private baseTitle = 'Dink Derby';
 
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -49,6 +51,8 @@ class SyncService {
     window.addEventListener('online', this.handleReconnect);
     window.addEventListener('focus', this.handleReconnect);
     window.addEventListener('offline', this.handleOffline);
+    document.addEventListener('visibilitychange', this.handleVisibility);
+    this.updateBadge();
   }
 
   stop() {
@@ -57,6 +61,7 @@ class SyncService {
     window.removeEventListener('online', this.handleReconnect);
     window.removeEventListener('focus', this.handleReconnect);
     window.removeEventListener('offline', this.handleOffline);
+    document.removeEventListener('visibilitychange', this.handleVisibility);
     this.started = false;
   }
 
@@ -75,6 +80,27 @@ class SyncService {
 
   private handleReconnect = () => void this.sync();
   private handleOffline = () => this.publish({ phase: 'offline', message: 'Offline — safely stored here' });
+  private handleVisibility = () => {
+    if (document.visibilityState === 'visible') this.resetBadge();
+  };
+
+  private updateBadge() {
+    if (this.unseenCount > 0) {
+      document.title = `(${this.unseenCount}) ${this.baseTitle}`;
+    } else {
+      document.title = this.baseTitle;
+    }
+  }
+
+  private bumpBadge(count: number) {
+    this.unseenCount += count;
+    this.updateBadge();
+  }
+
+  private resetBadge() {
+    this.unseenCount = 0;
+    this.updateBadge();
+  }
 
   private async markAcknowledged(items: SyncOutboxItem[], ids: string[]) {
     const acknowledged = new Set(ids);
@@ -144,7 +170,7 @@ class SyncService {
 
       await db.transaction(
         'rw',
-        [db.users, db.derbies, db.derbyParticipants, db.catches, db.chatMessages, db.reactions, db.media, db.syncOutbox, db.syncState],
+        [db.users, db.derbies, db.derbyParticipants, db.catches, db.chatMessages, db.reactions, db.media, db.syncOutbox, db.syncState, db.derbyEvents],
         async () => {
           await this.markAcknowledged(outbox, data.appliedOperationIds);
           await Promise.all(data.rejected.map((rejection) => db.syncOutbox.update(rejection.operationId, {
@@ -160,6 +186,15 @@ class SyncService {
           for (const incoming of patches.media) {
             const local = await db.media.get(incoming.id);
             await db.media.put({ ...incoming, blob: local?.blob });
+          }
+          if (data.events.length) {
+            await db.derbyEvents.bulkPut(data.events);
+            const newCatchesOrMessages = data.events.filter(
+              (event) => event.type === 'catch.create' || event.type === 'chatMessage.create',
+            ).length;
+            if (newCatchesOrMessages > 0 && document.visibilityState !== 'visible') {
+              this.bumpBadge(newCatchesOrMessages);
+            }
           }
           await db.syncState.put({ derbyId: '_global', cursor: data.nextCursor, lastAttemptAt: attemptedAt, lastSuccessAt: data.serverTime });
         },

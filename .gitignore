@@ -27,6 +27,7 @@ Thumbs.db
 
 # IDE / Editor
 .idea/
+.vercel/
 *.swp
 *.swo
 *~
@@ -46,3 +47,5 @@ drizzle/meta/
 tmp/
 temp/
 .cache/
+.vercel
+.env*

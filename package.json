@@ -2,12 +2,17 @@
   "name": "dink-derby",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": "24.x"
+  },
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "scripts": {
-    "test": "npm run test --workspaces"
+    "build": "npm run build -w @dink-derby/shared-types && npm run build -w @dink-derby/client && npm run build -w @dink-derby/server",
+    "test": "npm run test --workspaces",
+    "test:poc": "npm run test -w @dink-derby/shared-types && npm run test -w @dink-derby/client && npm run test -w @dink-derby/server && npm run test:e2e -w @dink-derby/client"
   },
   "repository": {
     "type": "git",
@@ -17,5 +22,8 @@
   "license": "ISC",
   "dependencies": {
     "agents-link": "^1.1.3"
+  },
+  "devDependencies": {
+    "drizzle-orm": "^0.45.2"
   }
 }

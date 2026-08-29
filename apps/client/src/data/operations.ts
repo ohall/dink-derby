@@ -12,6 +12,7 @@ import { db, type LocalMedia } from '../db';
 import { getOrCreateDeviceId } from '../utils/device';
 import { syncService } from '../sync';
 import { joinDerbyRequest } from '../lib/api';
+import { supabase } from '../lib/supabase';
 
 type CreateDerbyInput = {
   name: string;
@@ -33,7 +34,7 @@ type SaveCatchInput = {
 };
 
 function inviteCode() {
-  return `DINK-${crypto.randomUUID().replace(/-/g, '').slice(0, 6).toUpperCase()}`;
+  return `DINK-${crypto.randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase()}`;
 }
 
 function outboxItem(
@@ -330,4 +331,22 @@ export async function updateProfile(displayName: string) {
     await db.syncOutbox.add(outboxItem('user', updated.id, updated, 'update'));
   });
   syncService.requestSync();
+}
+
+export async function sendMagicLink(email: string) {
+  if (!supabase) throw new Error('Sign-in is not available on this device.');
+  const normalized = email.trim().toLowerCase();
+  if (!normalized.includes('@')) throw new Error('Enter a valid email address.');
+  const { error } = await supabase.auth.signInWithOtp({
+    email: normalized,
+    options: { emailRedirectTo: window.location.origin, shouldCreateUser: false },
+  });
+  if (error) throw new Error(`Dink Derby could not send your sign-in link: ${error.message}`);
+}
+
+export async function completeMagicLinkUpgrade() {
+  if (!supabase) throw new Error('Sign-in is not available on this device.');
+  const { data, error } = await supabase.auth.updateUser({ data: {} });
+  if (error) throw error;
+  return data.user;
 }

@@ -26,6 +26,7 @@ type SyncProcessor = typeof processSync;
 export const buildServer = (syncProcessor: SyncProcessor = processSync) => {
   const app = Fastify({
     logger: true,
+    bodyLimit: Number(process.env.BODY_LIMIT_BYTES || 2_000_000),
   });
 
   app.setErrorHandler((error, request, reply) => {
@@ -58,6 +59,14 @@ export const buildServer = (syncProcessor: SyncProcessor = processSync) => {
 
   app.post(
     '/sync',
+    {
+      config: {
+        rateLimit: {
+          max: Number(process.env.SYNC_RATE_LIMIT_MAX || 30),
+          timeWindow: '1 minute',
+        },
+      },
+    },
     async (request) => {
       const body = SyncRequestSchema.parse(request.body);
       const { clientId, userId, derbyId, cursor, outbox, lastSyncedAt } = body;
@@ -78,7 +87,14 @@ export const buildServer = (syncProcessor: SyncProcessor = processSync) => {
     }
   );
 
-  app.post('/join', async (request) => {
+  app.post('/join', {
+    config: {
+      rateLimit: {
+        max: Number(process.env.JOIN_RATE_LIMIT_MAX || 5),
+        timeWindow: '1 minute',
+      },
+    },
+  }, async (request) => {
     const body = JoinDerbyRequestSchema.parse(request.body);
     const actorId = await authenticate(request, body.user.id);
     const inviteCode = body.inviteCode.trim().toUpperCase();
@@ -136,6 +152,8 @@ export const buildServer = (syncProcessor: SyncProcessor = processSync) => {
     const actorId = await authenticate(request);
     const [record] = await db.select().from(media).where(eq(media.id, body.mediaId)).limit(1);
     if (!record || record.ownerId !== actorId) throw httpError(404, 'That catch photo is not available.');
+    const allowedContentTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedContentTypes.includes(body.contentType)) throw httpError(415, 'Only JPEG, PNG, or WebP photos are allowed.');
     const extension = body.contentType === 'image/png' ? 'png' : body.contentType === 'image/webp' ? 'webp' : 'jpg';
     const path = `${record.derbyId}/${record.id}.${extension}`;
     const upload = await createMediaUpload(path);

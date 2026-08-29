@@ -2,6 +2,7 @@ import { FormEvent, ReactNode, useEffect, useState } from 'react';
 import { Camera, Fish, HardDrive, Ruler, Scale, ShieldCheck, User as UserIcon, X } from 'lucide-react';
 import type { Derby, User } from '@dink-derby/shared-types';
 import { createDerby, joinDerby, saveCatch, updateProfile } from '../data/operations';
+import { identifyCatch } from '../lib/api';
 import { scoringRuleLabel } from '../domain/leaderboard';
 
 function Sheet({ children, titleId, onClose }: { children: ReactNode; titleId: string; onClose: () => void }) {
@@ -13,6 +14,17 @@ function Sheet({ children, titleId, onClose }: { children: ReactNode; titleId: s
       </section>
     </div>
   );
+}
+
+async function browserGeo() {
+  if (!navigator.geolocation) return { lat: undefined, lon: undefined };
+  return new Promise<{ lat?: number; lon?: number }>((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => resolve({ lat: position.coords.latitude, lon: position.coords.longitude }),
+      () => resolve({ lat: undefined, lon: undefined }),
+      { timeout: 4000 },
+    );
+  });
 }
 
 export function CatchSheet({ derby, onClose, onSaved }: { derby: Derby; onClose: () => void; onSaved: () => void }) {
@@ -41,7 +53,9 @@ export function CatchSheet({ derby, onClose, onSaved }: { derby: Derby; onClose:
     setSaving(true);
     setError('');
     try {
-      await saveCatch({ derby, species, measurement: value, note, photo: file });
+      const { lat, lon } = browserGeo ? await browserGeo() : { lat: undefined, lon: undefined };
+      const saved = await saveCatch({ derby, species, measurement: value, note, photo: file, lat, lon });
+      if (saved.photoMediaId) void identifyCatch(saved.id).catch(() => undefined);
       onSaved();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'The catch could not be saved.');

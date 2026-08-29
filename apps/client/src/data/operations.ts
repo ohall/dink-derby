@@ -31,6 +31,8 @@ type SaveCatchInput = {
   measurement?: number;
   note?: string;
   photo?: File;
+  lat?: number;
+  lon?: number;
 };
 
 function inviteCode() {
@@ -245,6 +247,8 @@ export async function saveCatch(input: SaveCatchInput) {
     updatedAt: now,
     clientId: deviceId,
     isPendingSync: true,
+    locationLat: input.lat,
+    locationLon: input.lon,
   };
   const mediaPayload: Media | undefined = media ? { ...media } : undefined;
   if (mediaPayload) delete (mediaPayload as LocalMedia).blob;

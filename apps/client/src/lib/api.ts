@@ -51,3 +51,17 @@ export async function getMediaDownloadUrl(mediaId: string) {
   const details = await response.json() as { signedUrl: string };
   return details.signedUrl;
 }
+
+export type IdentifyResponse = {
+  isFish: boolean;
+  species?: string;
+  guessLengthInInches?: number;
+  guessWeightInPounds?: number;
+  confidence?: 'low' | 'medium' | 'high';
+  reason?: string;
+};
+
+export async function identifyCatch(catchId: string) {
+  const response = await apiFetch(`/catches/${encodeURIComponent(catchId)}/identify`, { method: 'POST' });
+  return response.json() as Promise<IdentifyResponse>;
+}

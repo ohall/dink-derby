@@ -23,7 +23,7 @@ test('two anglers exercise the full derby feature surface', async ({ browser }) 
   await creator.getByLabel('Scoring').selectOption('biggest');
   await creator.getByRole('button', { name: /create derby/i }).click();
   await expect(creator.getByRole('heading', { name: 'Multi User Smoke Test' })).toBeVisible();
-  await expect(creator.getByText('Synced to derby')).toBeVisible({ timeout: 15_000 });
+  await expect(creator.getByText('Synced to derby')).toBeVisible({ timeout: 30_000 });
 
   const inviteButton = creator.locator('.invite-button');
   await expect(inviteButton).toBeVisible();

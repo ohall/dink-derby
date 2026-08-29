@@ -17,9 +17,11 @@
     "@supabase/supabase-js": "2.112.4",
     "dexie": "^3.2.4",
     "dexie-react-hooks": "^1.1.6",
+    "leaflet": "^1.9.4",
     "lucide-react": "^0.263.1",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "react-leaflet": "^4.2.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",

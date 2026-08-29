@@ -56,9 +56,18 @@ export const CatchSchema = z.object({
   photoMediaId: z.string().optional(),
   note: z.string().max(500).optional(),
   caughtAt: z.string(), // ISO
+  // AI-assisted fields, filled by /catches/:id/identify via OpenRouter
+  speciesGuessed: z.string().optional(),
+  guessLengthInInches: z.number().optional(),
+  guessWeightInPounds: z.number().optional(),
+  fromAI: z.boolean().optional(),
+  rejectedAsNonFish: z.boolean().optional(),
+  // Optional catch coordinates picked up from browser geolocation at save-time
+  locationLat: z.number().optional(),
+  locationLon: z.number().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
-  
+
   // Local-first metadata
   clientId: z.string(),
   isPendingSync: z.boolean(),
@@ -237,3 +246,16 @@ export const MediaCompleteRequestSchema = z.object({
 export const MediaDownloadResponseSchema = z.object({
   signedUrl: z.string().url(),
 });
+
+// --- Fish identification via OpenRouter ---
+
+export const IdentifyCatchResponseSchema = z.object({
+  isFish: z.boolean(),
+  species: z.string().optional(),
+  guessLengthInInches: z.number().optional(),
+  guessWeightInPounds: z.number().optional(),
+  confidence: z.enum(['low', 'medium', 'high']).optional(),
+  reason: z.string().optional(),
+});
+
+export type IdentifyCatchResponse = z.infer<typeof IdentifyCatchResponseSchema>;

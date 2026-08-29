@@ -17,9 +17,10 @@ import { and, eq } from 'drizzle-orm';
 
 import { getDerbySnapshot, processSync } from './sync';
 import { db } from './db';
-import { derbyParticipants, derbies, devices, media, users } from './db/schema';
+import { derbyParticipants, derbies, devices, media, users, catches } from './db/schema';
 import { authenticate, httpError } from './auth';
 import { createMediaDownload, createMediaUpload, mediaBucket } from './storage';
+import { identifyCatch, isIdentifyConfigured } from './identify';
 
 type SyncProcessor = typeof processSync;
 
@@ -180,6 +181,40 @@ export const buildServer = (syncProcessor: SyncProcessor = processSync) => {
       .where(and(eq(derbyParticipants.derbyId, record.derbyId), eq(derbyParticipants.userId, actorId))).limit(1);
     if (!membership) throw httpError(403, 'Join this derby to view its catch photos.');
     return MediaDownloadResponseSchema.parse({ signedUrl: await createMediaDownload(record.remoteUrl) });
+  });
+
+  app.post('/catches/:id/identify', async (request) => {
+    const params = z.object({ id: z.string() }).parse(request.params);
+    const actorId = await authenticate(request);
+    if (!isIdentifyConfigured()) throw httpError(503, 'Fish ID is not configured on this server.');
+
+    const [catchRecord] = await db.select().from(catches).where(eq(catches.id, params.id)).limit(1);
+    if (!catchRecord) throw httpError(404, 'That catch is not available.');
+    if (catchRecord.userId !== actorId) throw httpError(403, 'Only the angler who logged this catch can identify it.');
+    if (!catchRecord.photoUrl) throw httpError(409, 'Upload a catch photo before running identification.');
+
+    const result = await identifyCatch(catchRecord.photoUrl);
+
+    if (!result.isFish) {
+      await db.update(catches).set({ rejectedAsNonFish: true, updatedAt: new Date() }).where(eq(catches.id, catchRecord.id));
+      return { isFish: false as const, reason: result.reason };
+    }
+
+    await db.update(catches).set({
+      speciesGuessed: result.species,
+      guessLengthInInches: result.guessLengthInInches,
+      guessWeightInPounds: result.guessWeightInPounds,
+      fromAI: true,
+      updatedAt: new Date(),
+    }).where(eq(catches.id, catchRecord.id));
+
+    return {
+      isFish: true as const,
+      species: result.species,
+      guessLengthInInches: result.guessLengthInInches,
+      guessWeightInPounds: result.guessWeightInPounds,
+      confidence: result.confidence,
+    };
   });
 
   return app;

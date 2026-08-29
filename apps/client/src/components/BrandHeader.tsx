@@ -18,7 +18,6 @@ export function BrandHeader({ user, onHome, onProfile }: BrandHeaderProps) {
           <span className="brand-lockup__mark"><Fish size={26} strokeWidth={2.6} /></span>
           <span className="brand-lockup__type">
             <strong>DINK DERBY</strong>
-            <small>SMALL FISH. BIG FEELINGS.</small>
           </span>
         </button>
 

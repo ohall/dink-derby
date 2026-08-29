@@ -10,9 +10,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['dink-derby-icon.svg'],
       manifest: {
-        name: 'Dink Derby — Small Fish. Big Feelings.',
+        name: 'Dink Derby',
         short_name: 'Dink Derby',
-        description: 'Offline-first fishing derbies for friends.',
+        description: 'Offline fishing derbies with shared scoring and catch photos.',
         start_url: '/',
         display: 'standalone',
         background_color: '#f3e5c5',

@@ -22,6 +22,9 @@ export default defineConfig({
       command: 'npm run dev',
       url: 'http://localhost:5173',
       reuseExistingServer: !process.env.CI,
+      // Short sync interval keeps cross-device assertions focused instead of
+      // racing the phone-friendly 15s polling default.
+      env: { ...process.env, VITE_SYNC_INTERVAL_MS: '2000' },
     },
     {
       command: 'npm run dev -w @dink-derby/server',

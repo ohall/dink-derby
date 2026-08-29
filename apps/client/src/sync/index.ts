@@ -12,7 +12,7 @@ export type SyncSnapshot = {
   message: string;
 };
 
-const SYNC_INTERVAL_MS = 15_000;
+const SYNC_INTERVAL_MS = Number(import.meta.env.VITE_SYNC_INTERVAL_MS ?? 15_000);
 
 class SyncService {
   private snapshot: SyncSnapshot = { phase: 'idle', pendingCount: 0, message: 'Saved on this phone' };

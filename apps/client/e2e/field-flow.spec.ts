@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { testPhoto } from './fixtures';
 
 async function finishOnboarding(page: import('@playwright/test').Page, name: string) {
   await expect(page.getByRole('heading', { name: /angler profile/i })).toBeVisible();
@@ -51,11 +52,7 @@ test('saves a catch with its photo while offline and restores it after reload', 
 
   await context.setOffline(true);
   await page.getByRole('button', { name: /log a catch/i }).first().click();
-  await page.locator('input[type="file"]').setInputFiles({
-    name: 'catch.jpg',
-    mimeType: 'image/jpeg',
-    buffer: Buffer.from('/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAEKADAAQAAAABAAAAEAAAAAD/7QA4UGhvdG9zaG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8IAEQgAEAAQAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAMCBAEFAAYHCAkKC//EAMMQAAEDAwIEAwQGBAcGBAgGcwECAAMRBBIhBTETIhAGQVEyFGFxIweBIJFCFaFSM7EkYjAWwXLRQ5I0ggjhU0AlYxc18JNzolBEsoPxJlQ2ZJR0wmDShKMYcOInRTdls1V1pJXDhfLTRnaA40dWZrQJChkaKCkqODk6SElKV1hZWmdoaWp3eHl6hoeIiYqQlpeYmZqgpaanqKmqsLW2t7i5usDExcbHyMnK0NTV1tfY2drg5OXm5+jp6vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAQIAAwQFBgcICQoL/8QAwxEAAgIBAwMDAgMFAgUCBASHAQACEQMQEiEEIDFBEwUwIjJRFEAGMyNhQhVxUjSBUCSRoUOxFgdiNVPw0SVgwUThcvEXgmM2cCZFVJInotIICQoYGRooKSo3ODk6RkdISUpVVldYWVpkZWZnaGlqc3R1dnd4eXqAg4SFhoeIiYqQk5SVlpeYmZqgo6SlpqeoqaqwsrO0tba3uLm6wMLDxMXGx8jJytDT1NXW19jZ2uDi4+Tl5ufo6ery8/T19vf4+fr/2wBDAAICAgICAgMCAgMFAwMDBQYFBQUFBggGBgYGBggKCAgICAgICgoKCgoKCgoMDAwMDAwODg4ODg8PDw8PDw8PDw//2wBDAQICAgQEBAcEBAcQCwkLEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBD/2gAMAwEAAhEDEQAAAeE6RvdeZ6H/2gAIAQEAAQUCG43CXHvt1h7/ALYpNvfbUpH/2gAIAQMRAT8Bl1Uv8V//2gAIAQIRAT8Bx/Fx9Zv/2gAIAQEABj8CVOZlDrfOTLQLoDT9ZZPuqOOrQBao1D//xAAzEAEAAwACAgICAgMBAQAAAgsBEQAhMUFRYXGBkaGxwfDREOHxIDBAUGBwgJCgsMDQ4P/aAAgBAQABPyE+BER1szHxYNQ9+TcDqe6yy8O00gXYxiW//9oADAMBAAIRAxEAABBn/8QAMxEBAQEAAwABAgUFAQEAAQEJAQARITEQQVFhIHHwkYGhsdHB4fEwQFBgcICQoLDA0OD/2gAIAQMRAT8QYD8zve/g4/W3/9oACAECEQE/ENI8gZ89cfrb/9oACAEBAAE/EBXISkUVIqzKQkivm7VDsENUBx29U/NSDJHa7z7bIlwBJCCs8+7/AP/Z', 'base64'),
-  });
+  await page.locator('input[type="file"]').setInputFiles(testPhoto);
   await page.getByLabel('Length').fill('21.25');
   await page.getByLabel('Species').fill('Smallmouth bass');
   await page.getByLabel('Note').fill('Saved with zero bars.');

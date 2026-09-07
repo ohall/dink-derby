@@ -26,9 +26,9 @@ test('two anglers exercise the full derby feature surface', async ({ browser }) 
   await expect(creator.getByRole('heading', { name: 'Multi User Smoke Test' })).toBeVisible();
   await expect(creator.getByText('Synced to derby')).toBeVisible({ timeout: 30_000 });
 
-  const inviteButton = creator.locator('.invite-button');
-  await expect(inviteButton).toBeVisible();
-  const inviteCode = (await inviteButton.innerText()).trim();
+  await creator.getByRole('button', { name: 'Invite anglers', exact: true }).click();
+  const inviteCode = await creator.getByLabel('Invite code').inputValue();
+  await creator.getByRole('button', { name: 'Close', exact: true }).click();
 
   // 2. Joiner signs up with that code.
   await onboard(joiner, 'Joining Angler');
@@ -42,6 +42,7 @@ test('two anglers exercise the full derby feature surface', async ({ browser }) 
   await creator.locator('input[type="file"]').setInputFiles(testPhoto);
   await creator.getByLabel('Length').fill('21.25');
   await creator.getByLabel('Species').fill('Smallmouth bass');
+  await creator.getByText('Note & location', { exact: false }).click();
   await creator.getByLabel('Note').fill('Two-user test catch.');
   await creator.getByRole('button', { name: 'Save catch' }).click();
   await expect(creator.locator('.catch-card').filter({ hasText: 'Two-user test catch.' })).toContainText('21.25');
@@ -53,7 +54,7 @@ test('two anglers exercise the full derby feature surface', async ({ browser }) 
 
   // 5. Creator reacts to the joiner's future catch (fire). We register before joiner writes it.
   await joiner.reload();
-  await joiner.getByRole('button', { name: /Multi User Smoke Test/i }).click();
+  await expect(joiner.getByRole('heading', { name: /Multi User Smoke Test/i })).toBeVisible();
   await expect(joiner.getByText('Two-user test catch.')).toBeVisible({ timeout: 15_000 });
   await expect(joiner.getByText('Your turn.')).toBeVisible({ timeout: 15_000 });
 
@@ -61,6 +62,7 @@ test('two anglers exercise the full derby feature surface', async ({ browser }) 
   await joiner.getByRole('button', { name: /log a catch/i }).first().click();
   await joiner.getByLabel('Length').fill('19.5');
   await joiner.getByLabel('Species').fill('Largemouth bass');
+  await joiner.getByText('Note & location', { exact: false }).click();
   await joiner.getByLabel('Note').fill('Joiner blows the whistle.');
   await joiner.getByRole('button', { name: 'Save catch' }).click();
   await expect(joiner.locator('.catch-card').filter({ hasText: 'Joiner blows the whistle.' })).toContainText('19.5');
@@ -70,10 +72,12 @@ test('two anglers exercise the full derby feature surface', async ({ browser }) 
   await joiner.getByRole('button', { name: /trophy/i }).first().click();
 
   // 8. Activity tab should render both catches plus messages and reaction entries on both sides.
-  await creator.getByRole('button', { name: /activity/i }).click();
+  await creator.getByRole('button', { name: 'Rules & info', exact: true }).click();
+  await creator.getByRole('button', { name: 'View activity', exact: true }).click();
   await expect(creator.getByText(/logged Largemouth bass/i)).toBeVisible({ timeout: 30_000 });
   await expect(creator.getByText(/said "Your turn."/i)).toBeVisible();
-  await joiner.getByRole('button', { name: /activity/i }).click();
+  await joiner.getByRole('button', { name: 'Rules & info', exact: true }).click();
+  await joiner.getByRole('button', { name: 'View activity', exact: true }).click();
   await expect(joiner.getByText(/logged Smallmouth bass/i)).toBeVisible({ timeout: 15_000 });
 
   // 9. Standings should show the creator ahead (biggest fish) on both devices.

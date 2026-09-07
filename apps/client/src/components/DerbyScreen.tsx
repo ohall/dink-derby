@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
   ArrowLeft,
@@ -17,20 +17,29 @@ import {
   ShieldCheck,
   Trophy,
   Users,
+  Flag,
+  Pencil,
 } from 'lucide-react';
 import type { Catch, Derby, Reaction, User } from '@dink-derby/shared-types';
 import { db } from '../db';
 import { buildLeaderboard, findBiggestFish, formatScore, scoringLabel, scoringRuleLabel, type BiggestFish } from '../domain/leaderboard';
-import { sendMessage, toggleReaction } from '../data/operations';
+import { finishDerby, sendMessage, setCatchRemoved, toggleReaction } from '../data/operations';
+import { catchWithinDerby, isDerbyComplete } from '../domain/derbyLifecycle';
 import { useSyncStatus } from '../sync/useSyncStatus';
 import { syncService } from '../sync';
 import { getMediaDownloadUrl } from '../lib/api';
+import { Sheet } from './Sheet';
+import { EditCatchSheet } from './EditCatchSheet';
+import type { DerbySection } from '../domain/navigation';
 
 type DerbyScreenProps = {
   derby: Derby;
+  tab: DerbySection;
+  onTabChange: (section: DerbySection, replace?: boolean) => void;
   currentUser?: User;
   onBack: () => void;
   onLogCatch: () => void;
+  suspendPhotos?: boolean;
 };
 
 function formatRemaining(endsAt?: string) {
@@ -84,6 +93,7 @@ function ReactionBar({ derbyId, targetType, targetId, reactions, currentUserId }
             className={reacted ? 'reacted' : ''}
             type="button"
             aria-label={`${kind} reaction`}
+            aria-pressed={reacted}
             onClick={() => void toggleReaction(derbyId, targetType, targetId, kind)}
           >
             <ReactionIcon kind={kind} reacted={reacted} />
@@ -102,8 +112,8 @@ function LocalPhoto({ mediaId, alt }: { mediaId?: string; alt: string }) {
   useEffect(() => {
     let active = true;
     let objectUrl = '';
-    if (media?.blob) {
-      objectUrl = URL.createObjectURL(media.blob);
+    if (mediaId && (media?.bytes || media?.blob)) {
+      objectUrl = URL.createObjectURL(media.bytes ? new Blob([media.bytes], { type: media.contentType }) : media.blob!);
       setUrl(objectUrl);
     } else if (media?.remoteUrl && mediaId) {
       getMediaDownloadUrl(mediaId).then((next) => {
@@ -118,15 +128,26 @@ function LocalPhoto({ mediaId, alt }: { mediaId?: string; alt: string }) {
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [media]);
+  }, [media, mediaId]);
 
   if (!mediaId) return null;
   if (!url) return <div className="catch-photo catch-photo--fallback" role="img" aria-label={alt}><Fish size={54} strokeWidth={1.4} /><span>PHOTO UNAVAILABLE</span></div>;
-  return <img className="catch-photo" src={url} alt={alt} />;
+  return <img className="catch-photo" src={url} alt={alt} loading="lazy" decoding="async" />;
 }
 
-export function DerbyScreen({ derby, currentUser, onBack, onLogCatch }: DerbyScreenProps) {
-  const [tab, setTab] = useState<'feed' | 'standings' | 'activity' | 'rules'>('feed');
+export function DerbyScreen({ derby, tab, onTabChange: setTab, currentUser, onBack, onLogCatch, suspendPhotos }: DerbyScreenProps) {
+  const complete = isDerbyComplete(derby);
+  const wasComplete = useRef(complete);
+  const [confirmFinish, setConfirmFinish] = useState(false);
+  const [editingCatch, setEditingCatch] = useState<Catch>();
+  const [catchNotice, setCatchNotice] = useState('');
+  const [restoringId, setRestoringId] = useState<string>();
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [copyError, setCopyError] = useState('');
+  const [sending, setSending] = useState(false);
+  const [messageError, setMessageError] = useState('');
+  const [finishing, setFinishing] = useState(false);
+  const [finishError, setFinishError] = useState('');
   const [message, setMessage] = useState('');
   const [toast, setToast] = useState('');
   const [, forceClock] = useState(0);
@@ -140,6 +161,22 @@ export function DerbyScreen({ derby, currentUser, onBack, onLogCatch }: DerbyScr
   const userById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
   const leaderboard = useMemo(() => buildLeaderboard(derby, catches, participants, users), [derby, catches, participants, users]);
   const biggestFish = useMemo(() => findBiggestFish(derby, catches, participants, users), [derby, catches, participants, users]);
+  const scoredCatches = catches.filter(item => catchWithinDerby(derby, item));
+  const winners = leaderboard.filter(row => row.score > 0 && row.score === leaderboard[0]?.score && row.catchCount === leaderboard[0]?.catchCount);
+  const completionPending = useLiveQuery(() => db.syncOutbox.where('derbyId').equals(derby.id).filter(op => op.entityType === 'derby').count(), [derby.id]);
+
+  useEffect(() => {
+    if (complete && !wasComplete.current) setTab('standings', true);
+    wasComplete.current = complete;
+  }, [complete, setTab]);
+
+  async function completeDerby() {
+    setFinishing(true);
+    setFinishError('');
+    try { await finishDerby(derby.id); setConfirmFinish(false); }
+    catch (error) { setFinishError(error instanceof Error ? error.message : 'Could not finish derby.'); }
+    finally { setFinishing(false); }
+  }
 
   useEffect(() => {
     const interval = window.setInterval(() => forceClock((value) => value + 1), 60_000);
@@ -154,7 +191,7 @@ export function DerbyScreen({ derby, currentUser, onBack, onLogCatch }: DerbyScr
 
   const feed = useMemo(
     () => [
-      ...catches.map((item) => ({ kind: 'catch' as const, date: item.caughtAt, item })),
+      ...catches.filter(item => !item.deletedAt).map((item) => ({ kind: 'catch' as const, date: item.caughtAt, item })),
       ...messages.map((item) => ({ kind: 'message' as const, date: item.sentAt, item })),
     ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
     [catches, messages],
@@ -162,64 +199,88 @@ export function DerbyScreen({ derby, currentUser, onBack, onLogCatch }: DerbyScr
 
   async function copyInvite() {
     if (!derby.inviteCode) return;
-    await navigator.clipboard?.writeText(derby.inviteCode).catch(() => undefined);
-    setToast(`${derby.inviteCode} copied`);
+    setCopyError('');
+    try {
+      if (!navigator.clipboard) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(derby.inviteCode);
+      setToast('Invite code copied');
+    } catch { setCopyError('Could not copy automatically. Select the code above and copy it.'); }
   }
 
   async function submitMessage(event: FormEvent) {
     event.preventDefault();
-    if (!message.trim()) return;
+    if (!message.trim() || sending) return;
     const next = message;
-    setMessage('');
-    await sendMessage(derby.id, next);
+    setSending(true); setMessageError('');
+    try { await sendMessage(derby.id, next); setMessage(''); }
+    catch { setMessageError('Message not saved. Your text is still here; try again.'); }
+    finally { setSending(false); }
   }
+
+  async function restoreCatch(id: string) {
+    setRestoringId(id);
+    try { await setCatchRemoved(id, false); setCatchNotice('Catch restored. Standings updated on this device.'); }
+    catch (reason) { setCatchNotice(reason instanceof Error ? reason.message : 'Could not restore this catch.'); }
+    finally { setRestoringId(undefined); }
+  }
+
+  const removedCatches = catches.filter(item => item.deletedAt && item.userId === currentUser?.id);
 
   return (
     <main className="derby-screen page-width">
       <div className="derby-topline">
         <button className="back-button" type="button" onClick={onBack}><ArrowLeft size={19} /> All derbies</button>
-        <button className="invite-button" type="button" onClick={copyInvite}><Copy size={17} /> {derby.inviteCode || 'Invite crew'}</button>
+        <button className="invite-button" type="button" onClick={() => setInviteOpen(true)}><Users size={17} /> Invite anglers</button>
       </div>
 
       <section className="derby-banner">
         <div className="derby-banner__copy">
-          <p className="eyebrow"><span className="live-dot" /> {derby.status === 'finished' ? 'FINAL RESULTS' : 'LIVE DERBY'}</p>
-          <h1>{derby.name}</h1>
+          <p className="eyebrow">{!complete && <span className="live-dot" />} {complete ? 'COMPLETED DERBY' : 'LIVE DERBY'}</p>
+          <div className="derby-title-row"><h1>{derby.name}</h1>
+            {!complete && currentUser?.id === derby.createdByUserId && <button className="button button--paper finish-derby-button" type="button" onClick={() => setConfirmFinish(true)}><Flag size={18} /> Finish derby</button>}
+          </div>
           <p className="derby-location"><MapPin size={17} /> {derby.bodyOfWaterName}</p>
           <div className="derby-banner__facts">
-            <span><Clock3 size={18} /><b>{formatRemaining(derby.endsAt)}</b></span>
-            <span><Users size={18} /><b>{participants.length} anglers</b></span>
-            <span><Fish size={18} /><b>{catches.length} catches</b></span>
+            {(complete || derby.endsAt) && <span><Clock3 size={18} /><b>{complete ? `Ended ${new Date(derby.endsAt || derby.updatedAt).toLocaleString()}` : formatRemaining(derby.endsAt)}</b></span>}
+            <span><Users size={18} /><b>{participants.length} angler{participants.length === 1 ? '' : 's'}</b></span>
+            <span><Fish size={18} /><b>{scoredCatches.length} catch{scoredCatches.length === 1 ? '' : 'es'}</b></span>
           </div>
         </div>
-        <div className="derby-banner__leader">
-          <span className="leader-kicker"><Trophy size={17} /> LEADER</span>
+        {scoredCatches.length > 0 && <div className="derby-banner__leader">
+          <span className="leader-kicker"><Trophy size={17} /> {complete ? 'TOP SCORE' : 'LEADER'}</span>
           <strong>{leaderboard[0] ? formatScore(derby, leaderboard[0].score) : '—'}<small>{scoringLabel(derby)}</small></strong>
           <p>{leaderboard[0]?.displayName || 'No catches yet'}</p>
-          <button className="button button--coral" type="button" onClick={onLogCatch}><Camera size={20} /> Log a catch</button>
-        </div>
+        </div>}
       </section>
 
       <div className={`field-status field-status--${sync.phase}`}>
         <span>{sync.phase === 'idle' && !sync.pendingCount ? <Check size={17} /> : <ShieldCheck size={17} />}</span>
         <p><strong>{sync.message}</strong>{sync.pendingCount ? ` · ${sync.pendingCount} item${sync.pendingCount === 1 ? '' : 's'} waiting` : ''}</p>
         {sync.phase === 'error' && <button type="button" onClick={() => void syncService.retry()}>Try again</button>}
+        {sync.rejectedEditCount > 0 && <button type="button" onClick={() => void syncService.dismissRejectedEdits().catch(() => setToast('Could not dismiss the rejected edit. Try again.'))}>Use server version</button>}
       </div>
 
+      {complete && <section className="completion-summary" aria-label="Derby results summary">
+        <p className="eyebrow">{winners.length > 1 ? 'JOINT WINNERS' : 'WINNER'}</p>
+        <h2>{winners.length ? winners.map(row => row.displayName).join(' & ') : 'No scoring catches'}</h2>
+        <p>{scoredCatches.length} catch{scoredCatches.length === 1 ? '' : 'es'} · {participants.length} angler{participants.length === 1 ? '' : 's'} · {scoringRuleLabel(derby)}</p>
+        {!!completionPending && <p role="status">Completion saved on this device — waiting for server confirmation.</p>}
+        <p className="completion-note">Catch entry is closed. Catches recorded before the end time may still arrive from offline phones and update these results.</p>
+      </section>}
+
       <nav className="derby-tabs" aria-label="Derby sections">
-        <button type="button" className={tab === 'feed' ? 'active' : ''} onClick={() => setTab('feed')}><MessageCircle size={18} /> Feed</button>
-        <button type="button" className={tab === 'standings' ? 'active' : ''} onClick={() => setTab('standings')}><Trophy size={18} /> Standings</button>
-        <button type="button" className={tab === 'activity' ? 'active' : ''} onClick={() => setTab('activity')}><Clock3 size={18} /> Activity</button>
-        <button type="button" className={tab === 'rules' ? 'active' : ''} onClick={() => setTab('rules')}><Ruler size={18} /> Rules</button>
+        <button type="button" className={tab === 'feed' ? 'active' : ''} aria-pressed={tab === 'feed'} onClick={() => setTab('feed')}><MessageCircle size={18} /> Catches & chat</button>
+        <button type="button" className={tab === 'standings' ? 'active' : ''} aria-pressed={tab === 'standings'} onClick={() => setTab('standings')}><Trophy size={18} /> {complete ? 'Results' : 'Standings'}</button>
+        <button type="button" className={tab === 'rules' || tab === 'activity' ? 'active' : ''} aria-pressed={tab === 'rules' || tab === 'activity'} onClick={() => setTab('rules')}><Ruler size={18} /> Rules & info</button>
       </nav>
 
       {tab === 'feed' && (
         <section className="feed-layout">
           <div className="feed-column">
             <div className="section-title-row section-title-row--compact">
-              <h2>Derby feed</h2>
-              <button className="button button--primary button--small" type="button" onClick={onLogCatch}><Camera size={18} /> Log catch</button>
+              <h2>Catches & chat</h2>
             </div>
+            {catchNotice && <p className="catch-notice" role="status">{catchNotice}</p>}
 
             {feed.length ? <div className="feed-list">
               {feed.map((entry) => {
@@ -243,27 +304,35 @@ export function DerbyScreen({ derby, currentUser, onBack, onLogCatch }: DerbyScr
                     <header>
                       <span className="mini-avatar mini-avatar--gold">{initials(author)}</span>
                       <div><strong>{author}</strong><small>{relativeTime(item.caughtAt)} · {item.isPendingSync ? 'saved on this phone' : 'synced'}</small></div>
+                      {!complete && item.userId === currentUser?.id && <button className="catch-edit-button" type="button" onClick={() => setEditingCatch(item)}><Pencil size={16} /> Edit catch</button>}
                       {item.isPendingSync && <span className="pending-tag">PENDING</span>}
                     </header>
-                    <LocalPhoto mediaId={item.photoMediaId} alt={`${item.species || 'Fish'} logged by ${author}`} />
+                    <LocalPhoto mediaId={suspendPhotos ? undefined : item.photoMediaId} alt={`${item.species || 'Fish'} logged by ${author}`} />
                     <div className="catch-card__body">
                       <div><p className="fish-species">{item.species || 'Fish'}</p>{item.note && <p>{item.note}</p>}</div>
                       <strong className="catch-measure">{measure ?? '—'}<small>{scoringLabel(derby)}</small></strong>
                     </div>
                     <footer>
                       <ReactionBar derbyId={derby.id} targetType="catch" targetId={item.id} reactions={reactions} currentUserId={currentUser?.id} />
-                      <span>{item.isPendingSync ? 'Provisional score' : 'Counts in standings'}</span>
+                      <span>{!catchWithinDerby(derby, item) ? 'Outside derby cutoff · not scored' : item.isPendingSync ? 'Provisional score' : 'Counts in standings'}</span>
                     </footer>
                   </article>
                 );
-              })}
+            })}
             </div> : <div className="empty-feed"><Fish size={42} /><h3>No catches or messages yet</h3></div>}
+
+            {removedCatches.length > 0 && <details className="removed-catches"><summary>Removed catches ({removedCatches.length})</summary>
+              {removedCatches.map(item => <div key={item.id}><span>{item.species || 'Fish'} · {new Date(item.caughtAt).toLocaleString()}</span>
+                {!complete && <button className="button button--paper" type="button" disabled={!!restoringId} onClick={() => void restoreCatch(item.id)}>{restoringId === item.id ? 'Restoring…' : 'Restore catch'}</button>}</div>)}
+              {complete && <p>This derby is closed. Removed catches do not count in results.</p>}
+            </details>}
 
             <form className="chat-composer" onSubmit={submitMessage}>
               <label className="sr-only" htmlFor="derby-chat">Message the derby</label>
-              <input id="derby-chat" value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Message the derby" maxLength={300} />
-              <button type="submit" aria-label="Send message"><Send size={18} /></button>
+              <input id="derby-chat" value={message} disabled={sending} onChange={(event) => setMessage(event.target.value)} placeholder="Message the derby" maxLength={300} />
+              <button type="submit" aria-label="Send message" disabled={sending || !message.trim()}><Send size={18} /><span>{sending ? 'Sending…' : 'Send'}</span></button>
             </form>
+            {messageError && <p className="form-error" role="alert">{messageError}</p>}
           </div>
 
           <aside className="standings-peek">
@@ -276,7 +345,7 @@ export function DerbyScreen({ derby, currentUser, onBack, onLogCatch }: DerbyScr
 
       {tab === 'standings' && (
         <section className="single-panel standings-full">
-          <div className="section-title-row"><h2>Leaderboard</h2><span>{scoringRuleLabel(derby)}</span></div>
+          <div className="section-title-row"><h2>{complete ? 'Derby results' : 'Leaderboard'}</h2><span>{scoringRuleLabel(derby)}</span></div>
           {biggestFish && <BiggestFishCard derby={derby} biggest={biggestFish} />}
           <Leaderboard derby={derby} rows={leaderboard} currentUserId={currentUser?.id} detailed />
         </section>
@@ -284,6 +353,7 @@ export function DerbyScreen({ derby, currentUser, onBack, onLogCatch }: DerbyScr
 
       {tab === 'activity' && (
         <section className="single-panel activity-panel">
+          <button className="text-button" type="button" onClick={() => setTab('rules')}><ArrowLeft size={18} /> Back to rules & info</button>
           <div className="section-title-row"><h2>Derby activity</h2><span>{events.length} event{events.length === 1 ? '' : 's'}</span></div>
           {events.length ? (
             <div className="activity-list">
@@ -300,19 +370,46 @@ export function DerbyScreen({ derby, currentUser, onBack, onLogCatch }: DerbyScr
       {tab === 'rules' && (
         <section className="single-panel rules-panel">
           <div><h2>Derby rules</h2></div>
+          <p className="organizer-label">Organizer: {userById.get(derby.createdByUserId)?.displayName || 'Derby organizer'}{currentUser?.id === derby.createdByUserId ? ' (you)' : ''}</p>
           <div className="rule-grid">
             <Rule icon={derby.scoringMode === 'weight' ? <Scale /> : derby.scoringMode === 'length' ? <Ruler /> : <Fish />} label="Measurement" value={derby.scoringMode === 'count' ? 'No measurement required' : `${derby.scoringMode === 'weight' ? 'Weight' : 'Length'} · ${scoringLabel(derby)}`} />
             <Rule icon={<Trophy />} label="Scoring" value={scoringRuleLabel(derby)} />
+            <Rule icon={<Trophy />} label="Ties" value="More catches wins; equal score and catch count share the place" />
             <Rule icon={<Fish />} label="Catch entry" value="One fish per entry" />
             {derby.scoringMode !== 'count' && <Rule icon={<Scale />} label="Biggest fish" value="Tracked separately in standings" />}
             <Rule icon={<Fish />} label="Species" value={derby.speciesFilter || 'Open species'} />
             <Rule icon={<Camera />} label="Photo" value="Optional" />
             <Rule icon={<ShieldCheck />} label="Offline catches" value="Saved locally until synced" />
           </div>
+          <button className="button button--paper" type="button" onClick={() => setTab('activity')}><Clock3 size={18} /> View activity</button>
         </section>
       )}
 
-      <button className="floating-catch-button" type="button" onClick={onLogCatch}><Camera size={20} /> Log catch</button>
+      {!complete && <div className="catch-action-bar"><button className="button button--primary" type="button" onClick={onLogCatch}><Fish size={20} /> Log a catch</button></div>}
+      {editingCatch && <EditCatchSheet key={editingCatch.id} item={editingCatch} derby={derby} onClose={() => setEditingCatch(undefined)} onSaved={removed => {
+        setEditingCatch(undefined); setCatchNotice(removed ? 'Catch removed. You can restore it under Removed catches while the derby is active.' : 'Catch updated. Standings updated on this device.');
+      }} />}
+      {inviteOpen && <Sheet titleId="invite-title" onClose={() => setInviteOpen(false)}>
+        <h2 id="invite-title">Invite anglers</h2>
+        <p className="sheet__intro">Send this code to your group. They can open Dink Derby and choose Join with code.</p>
+        <div className="field-form"><label><span>Invite code</span><input className="invite-code" readOnly value={derby.inviteCode || ''} onFocus={event => event.target.select()} /></label>
+          <button className="button button--primary" type="button" onClick={() => void copyInvite()} disabled={!derby.inviteCode}><Copy size={18} /> Copy invite code</button>
+          {copyError && <p className="form-error" role="alert">{copyError}</p>}
+        </div>
+      </Sheet>}
+      {confirmFinish && <Sheet titleId="finish-title" onClose={() => setConfirmFinish(false)} busy={finishing}>
+          <h2 id="finish-title">Finish this derby?</h2>
+          <p>Close catch entry for {derby.name} and move it to Past derbies. This cannot be undone here.</p>
+          <p>{scoredCatches.length} catch{scoredCatches.length === 1 ? '' : 'es'} · {participants.length} angler{participants.length === 1 ? '' : 's'}</p>
+          <div className="finish-preview"><strong>{winners.length ? `Current leader: ${winners.map(row => row.displayName).join(' & ')}` : 'No scoring catches yet'}</strong><p>{scoringRuleLabel(derby)}{leaderboard[0] ? ` · ${formatScore(derby, leaderboard[0].score)} ${scoringLabel(derby)}` : ''}</p>{biggestFish && <p>Biggest fish: {formatScore(derby, biggestFish.score)} {scoringLabel(derby)} · {biggestFish.displayName}</p>}</div>
+          <p>Ask everyone to sync first. Catches already recorded on offline phones can arrive later and change the results.</p>
+          {!!sync.pendingCount && <p role="status">This device has {sync.pendingCount} changes waiting to sync. Completion will also be queued.</p>}
+          {finishError && <p role="alert" className="form-error">{finishError}</p>}
+          <div className="finish-actions">
+            <button autoFocus className="button button--paper" type="button" disabled={finishing} onClick={() => setConfirmFinish(false)}>Keep fishing</button>
+            <button className="button button--primary" type="button" disabled={finishing} onClick={() => void completeDerby()}>{finishing ? 'Finishing…' : 'Finish and view results'}</button>
+          </div>
+      </Sheet>}
       {toast && <div className="toast" role="status">{toast}</div>}
     </main>
   );
@@ -331,14 +428,16 @@ function BiggestFishCard({ derby, biggest }: { derby: Derby; biggest: BiggestFis
 function Leaderboard({ derby, rows, currentUserId, detailed = false }: { derby: Derby; rows: ReturnType<typeof buildLeaderboard>; currentUserId?: string; detailed?: boolean }) {
   return (
     <ol className={`leaderboard ${detailed ? 'leaderboard--detailed' : ''}`}>
-      {rows.map((row, index) => (
+      {rows.map((row) => {
+        const rank = rows.findIndex(other => other.score === row.score && other.catchCount === row.catchCount) + 1;
+        return (
         <li key={row.userId} className={row.userId === currentUserId ? 'is-you' : ''}>
-          <span className={`rank rank--${index + 1}`}>{index + 1}</span>
+          <span className={`rank rank--${rank}`}>{rank}</span>
           <span className="mini-avatar mini-avatar--paper">{initials(row.displayName)}</span>
           <span className="leaderboard__angler"><strong>{row.displayName}{row.userId === currentUserId ? ' · YOU' : ''}</strong><small>{row.catchCount} catch{row.catchCount === 1 ? '' : 'es'}{row.pendingCount ? ` · ${row.pendingCount} pending` : ''}</small></span>
           <strong className="leaderboard__score">{formatScore(derby, row.score)}<small>{scoringLabel(derby)}</small></strong>
         </li>
-      ))}
+      ); })}
     </ol>
   );
 }
@@ -348,14 +447,19 @@ function Rule({ icon, label, value }: { icon: React.ReactNode; label: string; va
 }
 
 function ActivityRow({ event, userById }: { event: import('../db').DerbyEventEntry; userById: Map<string, User> }) {
-  const payload = event.payload as { userId?: string; displayName?: string; species?: string; lengthInInches?: number; weightInPounds?: number; count?: number; text?: string; reaction?: string } | undefined;
-  const userName = payload?.userId ? userById.get(payload.userId)?.displayName || 'Someone' : 'Someone';
+  const payload = event.payload as { userId?: string; createdByUserId?: string; deletedAt?: string; displayName?: string; species?: string; lengthInInches?: number; weightInPounds?: number; count?: number; text?: string; reaction?: string } | undefined;
+  const authorId = payload?.userId || payload?.createdByUserId;
+  const userName = authorId ? userById.get(authorId)?.displayName || 'Someone' : 'Someone';
 
   let text = '';
   if (event.type === 'catch.create') {
     const species = payload?.species || 'a fish';
     const measure = payload?.lengthInInches ? `${payload.lengthInInches} in` : payload?.weightInPounds ? `${payload.weightInPounds} lb` : payload?.count ? `${payload.count} fish` : '';
     text = `${userName} logged ${species}${measure ? ` at ${measure}` : ''}`;
+  } else if (event.type === 'catch.update') {
+    text = `${userName} ${payload?.deletedAt ? 'removed' : 'updated'} a catch`;
+  } else if (event.type === 'derby.update') {
+    text = `${userName} finished this derby`;
   } else if (event.type === 'chatMessage.create') {
     text = `${userName} said "${payload?.text ?? '…'}"`;
   } else if (event.type === 'reaction.create') {

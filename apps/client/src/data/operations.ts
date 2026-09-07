@@ -8,11 +8,13 @@ import type {
   SyncOutboxItem,
   User,
 } from '@dink-derby/shared-types';
-import { db, type LocalMedia } from '../db';
+import { db } from '../db';
 import { getOrCreateDeviceId } from '../utils/device';
+import type { PreparedPhoto } from '../utils/photo';
 import { syncService } from '../sync';
 import { joinDerbyRequest } from '../lib/api';
 import { supabase } from '../lib/supabase';
+import { isDerbyComplete } from '../domain/derbyLifecycle';
 
 type CreateDerbyInput = {
   name: string;
@@ -26,11 +28,12 @@ type CreateDerbyInput = {
 };
 
 type SaveCatchInput = {
+  id?: string;
   derby: Derby;
   species?: string;
   measurement?: number;
   note?: string;
-  photo?: File;
+  photo?: PreparedPhoto;
   lat?: number;
   lon?: number;
 };
@@ -91,79 +94,6 @@ export async function joinDerby(inviteCode: string) {
   return result.derby;
 }
 
-async function hashBlob(blob: Blob) {
-  // Read in chunks so we don't spike mobile Safari while hashing a photo.
-  const stream = blob.stream();
-  const reader = stream.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    total += value.length;
-  }
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.length;
-  }
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-async function canvasBlob(canvas: HTMLCanvasElement, type: string, quality: number) {
-  return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Photo compression failed.'))), type, quality);
-  });
-}
-
-async function preparePhoto(file: File): Promise<{ blob: Blob; hash: string; width?: number; height?: number }> {
-  // Mobile browsers (especially iOS Safari) can kill the tab if photo prep holds
-  // the raw decoded bitmap, the original File, and the compressed output in memory
-  // at the same time. Use <img> decode (smaller peak than createImageBitmap) and
-  // cap to a modest longest edge so a 12MP phone photo doesn't explode JS heap.
-  const longestEdge = 1600;
-  if (!('createImageBitmap' in window) || !('Blob' in window)) {
-    return { blob: file, hash: await hashBlob(file) };
-  }
-
-  const url = URL.createObjectURL(file);
-  let decoded: { width: number; height: number; image: HTMLImageElement } | undefined;
-  try {
-    decoded = await new Promise<{ width: number; height: number; image: HTMLImageElement }>((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight, image: img });
-      img.onerror = () => reject(new Error('The photo could not be read.'));
-      img.src = url;
-    });
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-
-  const scale = Math.min(1, longestEdge / Math.max(decoded.width, decoded.height));
-  const width = Math.max(1, Math.round(decoded.width * scale));
-  const height = Math.max(1, Math.round(decoded.height * scale));
-
-  // Skip re-encode when the source is already a small JPEG — avoids another full copy.
-  if (file.type === 'image/jpeg' && scale === 1) {
-    decoded.image.src = '';
-    return { blob: file, hash: await hashBlob(file), width, height };
-  }
-
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext('2d');
-  if (!context) throw new Error('This browser cannot prepare the photo.');
-  context.drawImage(decoded.image, 0, 0, width, height);
-  decoded.image.src = ''; // release the decoded source as soon as the canvas holds it
-
-  const blob = await canvasBlob(canvas, 'image/jpeg', 0.82);
-  return { blob, hash: await hashBlob(blob), width, height };
-}
-
 export async function createDerby(input: CreateDerbyInput) {
   const { user } = await currentIdentity();
   const now = new Date().toISOString();
@@ -207,32 +137,35 @@ export async function createDerby(input: CreateDerbyInput) {
   return derby;
 }
 
+export async function finishDerby(derbyId: string) {
+  const { user } = await currentIdentity();
+  await db.transaction('rw', [db.derbies, db.derbyParticipants, db.syncOutbox], async () => {
+    const derby = await db.derbies.get(derbyId);
+    if (!derby) throw new Error('Derby not found.');
+    if (derby.createdByUserId !== user.id) throw new Error('Only the organizer can finish this derby.');
+    if (derby.status === 'finished') return;
+    if (derby.status === 'cancelled') throw new Error('This derby was cancelled.');
+    const now = new Date().toISOString();
+    const finished: Derby = { ...derby, status: 'finished', endsAt: derby.endsAt && derby.endsAt < now ? derby.endsAt : now, updatedAt: now };
+    await db.derbies.put(finished);
+    const operation = outboxItem('derby', derby.id, finished, 'update', derby.id);
+    // A newly created derby must reach the server before its completion.
+    const previous = await db.syncOutbox.where('derbyId').equals(derby.id).toArray();
+    operation.createdAt = new Date(Math.max(Date.now(), ...previous.map(op => Date.parse(op.createdAt) + 1))).toISOString();
+    await db.syncOutbox.add(operation);
+  });
+  syncService.requestSync();
+}
+
 export async function saveCatch(input: SaveCatchInput) {
   const { user, deviceId } = await currentIdentity();
-  if (input.derby.scoringMode !== 'count' && (!input.measurement || input.measurement <= 0)) {
+  if (input.derby.scoringMode !== 'count' && (!input.measurement || !Number.isFinite(input.measurement) || input.measurement <= 0)) {
     throw new Error(`Enter a valid ${input.derby.scoringMode}.`);
   }
-  const prepared = input.photo ? await preparePhoto(input.photo) : undefined;
+  let photoError: string | undefined;
   const now = new Date().toISOString();
-  const catchId = crypto.randomUUID();
-  const mediaId = prepared ? crypto.randomUUID() : undefined;
-  const media: LocalMedia | undefined = prepared && mediaId ? {
-    id: mediaId,
-    ownerId: user.id,
-    derbyId: input.derby.id,
-    catchId,
-    contentHash: prepared.hash,
-    contentType: prepared.blob.type || input.photo?.type || 'image/jpeg',
-    sizeBytes: prepared.blob.size,
-    width: prepared.width,
-    height: prepared.height,
-    createdAt: now,
-    updatedAt: now,
-    clientId: deviceId,
-    isPendingSync: true,
-    blob: prepared.blob,
-  } : undefined;
-  const item: Catch = {
+  const catchId = input.id ?? crypto.randomUUID();
+  let item: Catch = {
     id: catchId,
     derbyId: input.derby.id,
     userId: user.id,
@@ -240,7 +173,6 @@ export async function saveCatch(input: SaveCatchInput) {
     lengthInInches: input.derby.scoringMode === 'length' ? input.measurement : undefined,
     weightInPounds: input.derby.scoringMode === 'weight' ? input.measurement : undefined,
     count: 1,
-    photoMediaId: mediaId,
     note: input.note?.trim() || undefined,
     caughtAt: now,
     createdAt: now,
@@ -250,19 +182,56 @@ export async function saveCatch(input: SaveCatchInput) {
     locationLat: input.lat,
     locationLon: input.lon,
   };
-  const mediaPayload: Media | undefined = media ? { ...media } : undefined;
-  if (mediaPayload) delete (mediaPayload as LocalMedia).blob;
-
-  await db.transaction('rw', [db.catches, db.media, db.syncOutbox], async () => {
-    await db.catches.add(item);
-    if (media) await db.media.add(media);
-    const operations = [outboxItem('catch', item.id, item, 'create', input.derby.id)];
-    if (media && mediaPayload) operations.push(outboxItem('media', media.id, mediaPayload, 'create', input.derby.id));
-    await db.syncOutbox.bulkAdd(operations);
+  // Commit the fish and clear its draft atomically, before any photo write.
+  // Reusing the draft ID makes retries after an interruption idempotent.
+  const createOperation = outboxItem('catch', item.id, item, 'create', input.derby.id);
+  await db.transaction('rw', [db.catches, db.syncOutbox, db.catchDrafts, db.derbies], async () => {
+    const existing = await db.catches.get(catchId);
+    if (existing) {
+      if (existing.userId !== user.id || existing.derbyId !== input.derby.id) throw new Error('This catch belongs to another angler or derby.');
+      item = existing;
+    } else {
+      const latest = await db.derbies.get(input.derby.id) ?? input.derby;
+      if (isDerbyComplete(latest) || latest.status === 'cancelled') throw new Error('This derby is closed. New catches cannot be added.');
+      await db.catches.add(item);
+      await db.syncOutbox.add(createOperation);
+    }
+    await db.catchDrafts.delete(catchId);
   });
 
+  const prepared = input.photo;
+  if (prepared && !item.photoMediaId) {
+    try {
+      const mediaId = crypto.randomUUID();
+      const metadata: Media = {
+        id: mediaId, ownerId: user.id, derbyId: input.derby.id, catchId,
+        contentHash: prepared.hash, contentType: prepared.contentType,
+        sizeBytes: prepared.bytes.byteLength, width: prepared.width, height: prepared.height,
+        createdAt: now, updatedAt: now, clientId: deviceId, isPendingSync: true,
+      };
+      const attached = await db.transaction('rw', [db.catches, db.media, db.syncOutbox], async () => {
+        const current = (await db.catches.get(catchId))!;
+        if (current.photoMediaId) return current;
+        const linked = { ...current, photoMediaId: mediaId, updatedAt: new Date().toISOString(), isPendingSync: true };
+        const updateOperation = outboxItem('catch', catchId, linked, 'update', input.derby.id);
+        // IndexedDB breaks equal timestamp ties by random UUID. Keep the photo
+        // update strictly after its create so sync cannot overwrite the link.
+        updateOperation.createdAt = new Date(Math.max(Date.now(), Date.parse(createOperation.createdAt) + 1)).toISOString();
+        await db.media.add({ ...metadata, bytes: prepared.bytes });
+        await db.catches.put(linked);
+        await db.syncOutbox.bulkAdd([
+          updateOperation,
+          outboxItem('media', mediaId, metadata, 'create', input.derby.id),
+        ]);
+        return linked;
+      });
+      item = attached;
+    } catch {
+      photoError = 'Catch saved. The photo could not be stored on this device.';
+    }
+  }
   syncService.requestSync();
-  return item;
+  return { item, photoError };
 }
 
 export async function sendMessage(derbyId: string, text: string) {
@@ -286,6 +255,42 @@ export async function sendMessage(derbyId: string, text: string) {
   });
   syncService.requestSync();
 }
+
+export type CatchCorrection = { measurement?: number; species?: string; note?: string };
+
+async function changeCatch(catchId: string, correction: CatchCorrection | { removed: boolean }) {
+  const { user } = await currentIdentity();
+  await db.transaction('rw', [db.catches, db.derbies, db.syncOutbox], async () => {
+    const current = await db.catches.get(catchId);
+    if (!current || current.userId !== user.id) throw new Error('You can only change your own catches.');
+    const derby = await db.derbies.get(current.derbyId);
+    if (!derby || isDerbyComplete(derby) || derby.status === 'cancelled') throw new Error('This derby is closed. Its catches cannot be changed.');
+    const now = new Date().toISOString();
+    let next: Catch;
+    if ('removed' in correction) {
+      next = { ...current, deletedAt: correction.removed ? now : undefined, updatedAt: now, isPendingSync: true };
+    } else {
+      if (current.deletedAt) throw new Error('Restore this catch before editing it.');
+      if (derby.scoringMode !== 'count' && (!correction.measurement || !Number.isFinite(correction.measurement) || correction.measurement <= 0 || correction.measurement > 999)) {
+        throw new Error(`Enter a valid ${derby.scoringMode} between 0.01 and 999.`);
+      }
+      if ((correction.note?.length ?? 0) > 500) throw new Error('Keep the note to 500 characters.');
+      next = { ...current, species: correction.species?.trim() || undefined, note: correction.note?.trim() || undefined,
+        lengthInInches: derby.scoringMode === 'length' ? correction.measurement : undefined,
+        weightInPounds: derby.scoringMode === 'weight' ? correction.measurement : undefined,
+        count: 1, updatedAt: now, isPendingSync: true };
+    }
+    const operation = outboxItem('catch', current.id, next, 'update', current.derbyId);
+    const previous = await db.syncOutbox.where('derbyId').equals(current.derbyId).filter(op => op.entityType === 'catch' && op.entityId === current.id).toArray();
+    operation.createdAt = new Date(Math.max(Date.now(), ...previous.map(op => Date.parse(op.createdAt) + 1))).toISOString();
+    await db.catches.put(next);
+    await db.syncOutbox.add(operation);
+  });
+  syncService.requestSync();
+}
+
+export const correctCatch = (catchId: string, correction: CatchCorrection) => changeCatch(catchId, correction);
+export const setCatchRemoved = (catchId: string, removed: boolean) => changeCatch(catchId, { removed });
 
 export async function toggleReaction(
   derbyId: string,

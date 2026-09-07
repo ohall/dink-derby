@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie';
+import type { PreparedPhoto } from './utils/photo';
 import type {
   Catch,
   ChatMessage,
@@ -11,7 +12,21 @@ import type {
   User,
 } from '@dink-derby/shared-types';
 
-export type LocalMedia = Media & { blob?: Blob };
+// Keep blob for photos saved by older versions; new photos use bounded bytes
+// to avoid WebKit's IndexedDB Blob staging failures.
+export type LocalMedia = Media & { blob?: Blob; bytes?: ArrayBuffer };
+
+export type CatchDraft = {
+  id: string;
+  derbyId: string;
+  userId: string;
+  measurement: string;
+  species: string;
+  note: string;
+  photo?: PreparedPhoto;
+  isOpen: boolean;
+  updatedAt: string;
+};
 
 export type DerbyEventEntry = {
   id: string;
@@ -53,6 +68,7 @@ export class DinkDerbyDatabase extends Dexie {
   settings!: Table<AppSettings, string>;
   syncState!: Table<DerbySyncState, string>;
   derbyEvents!: Table<DerbyEventEntry, string>;
+  catchDrafts!: Table<CatchDraft, string>;
 
   constructor() {
     // A fresh database name intentionally separates this rebuild from the legacy client.
@@ -74,6 +90,10 @@ export class DinkDerbyDatabase extends Dexie {
 
     this.version(2).stores({
       derbyEvents: 'id, derbyId, sequence',
+    });
+
+    this.version(3).stores({
+      catchDrafts: 'id, userId, &[derbyId+userId], updatedAt',
     });
   }
 }

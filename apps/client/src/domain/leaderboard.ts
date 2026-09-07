@@ -1,4 +1,5 @@
 import type { Catch, Derby, DerbyParticipant, User } from '@dink-derby/shared-types';
+import { catchWithinDerby } from './derbyLifecycle';
 
 export type LeaderboardRow = {
   userId: string;
@@ -37,7 +38,7 @@ export function buildLeaderboard(
   users: User[],
 ): LeaderboardRow[] {
   const userById = new Map(users.map((user) => [user.id, user]));
-  const active = catches.filter((item) => item.derbyId === derby.id && !item.deletedAt);
+  const active = catches.filter((item) => item.derbyId === derby.id && catchWithinDerby(derby, item));
 
   return participants
     .filter((participant) => participant.derbyId === derby.id)
@@ -70,7 +71,7 @@ export function findBiggestFish(
   const participantByUserId = new Map(participants.map((participant) => [participant.userId, participant]));
   const userById = new Map(users.map((user) => [user.id, user]));
   const item = catches
-    .filter((candidate) => candidate.derbyId === derby.id && !candidate.deletedAt && catchScore(derby, candidate) > 0)
+    .filter((candidate) => candidate.derbyId === derby.id && catchWithinDerby(derby, candidate) && catchScore(derby, candidate) > 0)
     .sort((a, b) => catchScore(derby, b) - catchScore(derby, a))[0];
   if (!item) return undefined;
   return {

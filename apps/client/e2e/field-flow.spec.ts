@@ -35,6 +35,7 @@ test('logs exactly one fish in a count derby without requiring a measurement or 
 
   await page.getByRole('button', { name: /log a catch/i }).first().click();
   await expect(page.getByText('This catch adds one fish to your total.')).toBeVisible();
+  await page.getByText('Note & location', { exact: false }).click();
   await page.getByLabel('Note').fill('No measurement or photo.');
   await page.getByRole('button', { name: 'Save catch' }).click();
 
@@ -55,6 +56,7 @@ test('saves a catch with its photo while offline and restores it after reload', 
   await page.locator('input[type="file"]').setInputFiles(testPhoto);
   await page.getByLabel('Length').fill('21.25');
   await page.getByLabel('Species').fill('Smallmouth bass');
+  await page.getByText('Note & location', { exact: false }).click();
   await page.getByLabel('Note').fill('Saved with zero bars.');
   await page.getByRole('button', { name: 'Save catch' }).click();
 
@@ -63,7 +65,7 @@ test('saves a catch with its photo while offline and restores it after reload', 
 
   await context.setOffline(false);
   await page.reload();
-  await page.getByRole('button', { name: /Offline Throwdown/i }).click();
+  await expect(page.getByRole('heading', { name: /Offline Throwdown/i })).toBeVisible();
   await expect(page.getByText('Saved with zero bars.')).toBeVisible();
   await expect(page.getByText('21.25').first()).toBeVisible();
 });

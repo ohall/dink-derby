@@ -22,6 +22,7 @@ import {
   UserSchema,
 } from '@dink-derby/shared-types';
 import { db } from './db';
+import { assertCatchBeforeCutoff, assertFinishAllowed } from './derbyLifecycle';
 import {
   catches,
   chatMessages,
@@ -361,8 +362,9 @@ async function applyOperation(database: typeof db, item: SyncOutboxItem) {
     return;
   }
   if (item.entityType === 'derby') {
-    if (item.operation === 'delete') await database.delete(derbies).where(eq(derbies.id, item.entityId));
-    else await database.insert(derbies).values(data as NewDerby).onConflictDoUpdate({ target: derbies.id, set: data });
+    if (item.operation === 'update') {
+      await database.update(derbies).set({ status: 'finished', endsAt: data.endsAt as Date, updatedAt: new Date() }).where(eq(derbies.id, item.entityId));
+    } else await database.insert(derbies).values(data as NewDerby).onConflictDoNothing();
     return;
   }
   if (item.entityType === 'derbyParticipant') {
@@ -371,8 +373,20 @@ async function applyOperation(database: typeof db, item: SyncOutboxItem) {
     return;
   }
   if (item.entityType === 'catch') {
-    if (item.operation === 'delete') await database.delete(catches).where(eq(catches.id, item.entityId));
-    else await database.insert(catches).values(data as NewCatch).onConflictDoUpdate({ target: catches.id, set: data });
+    // Tombstones stay in snapshots so another phone cannot resurrect a removed
+    // catch. Updates deliberately cannot change ownership or catch timestamps.
+    if (item.operation === 'delete') await database.update(catches).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(catches.id, item.entityId));
+    else if (item.operation === 'update') await database.update(catches).set({
+      species: (data.species as string | undefined) ?? null,
+      note: (data.note as string | undefined) ?? null,
+      lengthInInches: (data.lengthInInches as number | undefined) ?? null,
+      weightInPounds: (data.weightInPounds as number | undefined) ?? null,
+      count: data.count as number,
+      photoMediaId: (data.photoMediaId as string | undefined) ?? null,
+      deletedAt: (data.deletedAt as Date | undefined) ?? null,
+      updatedAt: new Date(),
+    }).where(eq(catches.id, item.entityId));
+    else await database.insert(catches).values(data as NewCatch).onConflictDoNothing();
     return;
   }
   if (item.entityType === 'chatMessage') {
@@ -402,8 +416,17 @@ async function assertCanWrite(database: typeof db, userId: string, clientId: str
     if (item.entityId !== clientId || payload.userId !== userId) throw new Error('This device does not belong to the signed-in user.');
     return;
   }
-  if (item.entityType === 'derby' && item.operation === 'create') {
-    if (payload.createdByUserId !== userId) throw new Error('A derby must be created by the signed-in user.');
+  if (item.entityType === 'derby') {
+    const next = DerbySchema.parse(payload);
+    if (item.derbyId !== item.entityId) throw new Error('The derby operation targets the wrong derby.');
+    const [existing] = await database.select().from(derbies).where(eq(derbies.id, item.entityId)).limit(1).for('update');
+    if (item.operation === 'create') {
+      if (next.createdByUserId !== userId || (existing && existing.createdByUserId !== userId)) throw new Error('A derby must be created by the signed-in user.');
+      if (!existing && next.status === 'finished') throw new Error('Create the derby before finishing it.');
+    } else {
+      if (!existing || item.operation !== 'update') throw new Error('This derby cannot be changed.');
+      assertFinishAllowed(toDerby(existing), next, userId);
+    }
     return;
   }
   if (item.entityType === 'derbyParticipant' && item.operation === 'create') {
@@ -419,15 +442,34 @@ async function assertCanWrite(database: typeof db, userId: string, clientId: str
     .where(and(eq(derbyParticipants.derbyId, derbyId), eq(derbyParticipants.userId, userId))).limit(1);
   if (!membership) throw new Error('You have not joined this derby.');
 
-  if (item.entityType === 'derby' && !membership.isAdmin) throw new Error('Only a derby admin can change this derby.');
   if (['catch', 'chatMessage', 'reaction'].includes(item.entityType) && payload.userId !== userId) {
     throw new Error('A user can only write their own field activity.');
   }
   if (item.entityType === 'media' && payload.ownerId !== userId) throw new Error('A user can only upload their own catch photo.');
 
   if (item.entityType === 'catch') {
-    const [existing] = await database.select().from(catches).where(eq(catches.id, item.entityId)).limit(1);
+    if (payload.derbyId !== derbyId) throw new Error('Catch derby does not match the operation.');
+    const [derby] = await database.select().from(derbies).where(eq(derbies.id, derbyId)).limit(1).for('share');
+    if (!derby) throw new Error('Derby not found.');
+    const next = CatchSchema.parse(payload);
+    assertCatchBeforeCutoff(toDerby(derby), next.caughtAt);
+    if (next.count !== 1) throw new Error('Each catch must record exactly one fish.');
+    const measurement = derby.scoringMode === 'weight' ? next.weightInPounds : next.lengthInInches;
+    if (derby.scoringMode !== 'count' && (!measurement || !Number.isFinite(measurement) || measurement <= 0 || measurement > 999)) throw new Error('Enter a valid catch measurement between 0.01 and 999.');
+    const [existing] = await database.select().from(catches).where(eq(catches.id, item.entityId)).limit(1).for('update');
+    if (!existing && item.operation !== 'create') throw new Error('Create this catch before changing it.');
     if (existing && existing.userId !== userId) throw new Error('A user cannot change another angler’s catch.');
+    if (existing && existing.derbyId !== derbyId) throw new Error('A catch cannot move to another derby.');
+    if (existing && item.operation !== 'create') {
+      if (existing.caughtAt.toISOString() !== next.caughtAt || existing.createdAt.toISOString() !== next.createdAt || existing.clientId !== next.clientId) throw new Error('A catch’s original time and device cannot change.');
+    }
+    if (existing && (derby.status === 'finished' || (derby.endsAt && derby.endsAt.getTime() <= Date.now()))) {
+      const saved = toCatch(existing);
+      for (const key of ['caughtAt', 'count', 'lengthInInches', 'weightInPounds', 'deletedAt', 'species', 'note'] as const) {
+        if (payload[key] !== saved[key]) throw new Error('Scores cannot be edited after the derby ends.');
+      }
+      if (item.operation === 'delete') throw new Error('Catches cannot be deleted after the derby ends.');
+    }
   }
   if (item.entityType === 'chatMessage') {
     const [existing] = await database.select().from(chatMessages).where(eq(chatMessages.id, item.entityId)).limit(1);

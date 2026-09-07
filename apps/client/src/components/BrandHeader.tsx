@@ -6,9 +6,10 @@ type BrandHeaderProps = {
   user?: User;
   onHome: () => void;
   onProfile: () => void;
+  showSync?: boolean;
 };
 
-export function BrandHeader({ user, onHome, onProfile }: BrandHeaderProps) {
+export function BrandHeader({ user, onHome, onProfile, showSync = true }: BrandHeaderProps) {
   const sync = useSyncStatus();
 
   return (
@@ -22,12 +23,12 @@ export function BrandHeader({ user, onHome, onProfile }: BrandHeaderProps) {
         </button>
 
         <div className="brand-header__actions">
-          <div className={`sync-pill sync-pill--${sync.phase}`} title={sync.message}>
+          {showSync && <div className={`sync-pill sync-pill--${sync.phase}`} title={sync.message}>
             <i aria-hidden="true" />
-            <span>{sync.phase === 'syncing' ? 'Syncing' : sync.pendingCount ? `${sync.pendingCount} pending` : sync.phase === 'idle' ? 'Synced' : 'Saved here'}</span>
-          </div>
-          <button className="profile-button" type="button" onClick={onProfile} aria-label="Edit angler profile">
-            <span>{user?.displayName?.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || <UserIcon size={18} />}</span>
+            <span>{sync.phase === 'syncing' ? 'Syncing' : sync.phase === 'offline' ? 'Offline' : sync.phase === 'error' ? 'Not synced' : sync.pendingCount ? `${sync.pendingCount} pending` : 'Synced'}</span>
+          </div>}
+          <button className="profile-button" type="button" onClick={onProfile} aria-label="Edit angler profile" title={user?.displayName || 'Profile'}>
+            <UserIcon size={18} /><span>Profile</span>
           </button>
         </div>
       </div>

@@ -28,7 +28,7 @@ infra/
 - **Timestamps**: ISO 8601 UTC strings.
 - **Offline**: All writes go to local IndexedDB first, then the sync outbox. The sync API returns acknowledgements, rejections, patches, and an event cursor.
 - **Testing**: Unit tests required for non-trivial logic. Update tests with changes.
-- **Commits**: Agents commit and push only when explicitly asked; otherwise hands off.
+- **Commits**: The user authorizes routine commits and pushes. Commit and push tested, coherent milestones periodically during implementation and before handoff. Include only in-scope changes, never secrets, and never force-push. Honor any explicit request to pause commits or pushes.
 
 ## Skills
 

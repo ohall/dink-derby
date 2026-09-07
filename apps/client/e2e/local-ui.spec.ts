@@ -1,0 +1,75 @@
+import { expect, test } from '@playwright/test';
+
+test('local scoring, optional photos, navigation, and reload persistence', async ({ page }) => {
+  test.skip(!!process.env.E2E_BASE_URL, 'Local-only test data; do not run against production.');
+  await page.goto('/');
+  await page.getByLabel('Display name').fill('Local scoring test');
+  await page.getByRole('button', { name: 'Save profile', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Start a derby', exact: true }).first().click();
+  await page.getByLabel('Derby name').fill('Local best three');
+  await page.getByLabel('Water', { exact: true }).fill('Test pond');
+  await page.getByRole('button', { name: 'Weight', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Scoring', exact: true }).selectOption({ label: 'Best 3 fish' });
+  await page.getByLabel('Species').fill('Smallmouth bass');
+  await page.getByRole('button', { name: 'Create derby', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  for (const weight of [2, 3, 4, 1]) {
+    await page.getByRole('button', { name: 'Log a catch', exact: true }).click();
+    await page.getByLabel('Weight', { exact: true }).fill(String(weight));
+    await page.getByLabel('Species').fill('Smallmouth bass');
+    await page.getByRole('button', { name: 'Save catch', exact: true }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  }
+  await expect(page.locator('.catch-card')).toHaveCount(4);
+  await page.getByRole('button', { name: 'Standings', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Leaderboard', exact: true })).toBeVisible();
+  await expect(page.locator('.standings-full')).toContainText('9.00');
+  await expect(page.locator('.standings-full')).toContainText('4.00');
+  await page.getByRole('button', { name: 'Rules & info', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Derby rules', exact: true })).toBeVisible();
+  await expect(page.locator('.rules-panel')).toContainText('Smallmouth bass');
+  await page.getByRole('button', { name: 'View activity', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Derby activity', exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Derby activity', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Catches & chat', exact: true }).click();
+  await expect(page.locator('.catch-card')).toHaveCount(4);
+  await page.getByRole('button', { name: 'Finish derby', exact: true }).click();
+  await page.getByRole('button', { name: 'Keep fishing', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Log a catch', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Finish derby', exact: true }).click();
+  await page.getByRole('button', { name: 'Finish and view results', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Derby results', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /log.*catch/i })).toHaveCount(0);
+  await expect(page.locator('.standings-full')).toContainText('9.00');
+  await expect(page.locator('.completion-summary')).toContainText('Local scoring test');
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Derby results', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'All derbies', exact: true }).click();
+  await expect(page.getByRole('button', { name: /Past derbies/ })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: /Local best three/ }).click();
+  await expect(page.getByRole('heading', { name: 'Derby results', exact: true })).toBeVisible();
+  await expect(page.locator('.standings-full')).toContainText('9.00');
+});
+
+test('fish-count derby saves exactly one fish without measurement or photo', async ({ page }) => {
+  test.skip(!!process.env.E2E_BASE_URL, 'Local-only test data; do not run against production.');
+  await page.goto('/');
+  await page.getByLabel('Display name').fill('Count test');
+  await page.getByRole('button', { name: 'Save profile', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Start a derby', exact: true }).first().click();
+  await page.getByLabel('Derby name').fill('Local fish count');
+  await page.getByLabel('Water', { exact: true }).fill('Test pond');
+  await page.getByRole('button', { name: 'Fish count', exact: true }).click();
+  await page.getByRole('button', { name: 'Create derby', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Log a catch', exact: true }).click();
+  await expect(page.getByRole('spinbutton')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Save catch', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('.catch-card')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Standings', exact: true }).click();
+  await expect(page.locator('.leaderboard__score')).toHaveText('1fish');
+});

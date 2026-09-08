@@ -34,6 +34,7 @@ The direct Supabase REST endpoint returned a pre-existing schema-cache 503 durin
 ## Post-deploy observability
 
 - Error scan: no error-level logs returned for either Vercel project over the 10-minute post-release window, including the live test.
+- Drains: none configured in the Vercel team; external log retention/alerting remains a monitoring gap.
 - Supabase security advisors: no errors; existing leaked-password-protection warning remains. The current app uses anonymous profiles, not password sign-in.
 - Monitoring: one-time release checks completed; no new monitoring services or alerts configured.
 

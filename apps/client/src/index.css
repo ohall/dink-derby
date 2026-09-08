@@ -66,6 +66,11 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .sync-pill--syncing i { background: var(--gold); animation: pulse 1s infinite; }
 .sync-pill--offline i, .sync-pill--error i { background: var(--coral); box-shadow: 0 0 0 4px rgb(222 115 87 / .16); }
 .profile-button { width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--coral); color: white; font-size: .72rem; font-weight: 900; cursor: pointer; box-shadow: 0 5px 13px rgb(147 64 43 / .2); }
+.install-button { min-height: 38px; display: flex; align-items: center; gap: 7px; padding: 0 13px; border: 1px solid var(--line); border-radius: 999px; background: rgb(255 250 240 / .76); color: var(--forest); font-size: .72rem; font-weight: 800; cursor: pointer; }
+
+.install-steps { margin: 0 0 18px; padding: 0; display: grid; gap: 12px; list-style: none; counter-reset: install-step; }
+.install-steps li { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper-bright); line-height: 1.45; }
+.install-steps__icon { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; color: var(--cream); background: var(--forest); }
 
 .button { min-height: 46px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 0 18px; border: 1px solid transparent; border-radius: 12px; font-weight: 850; cursor: pointer; transition: transform .16s ease, background .16s ease, box-shadow .16s ease; }
 .button:hover:not(:disabled) { transform: translateY(-1px); }
@@ -246,7 +251,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 
 @media (max-width: 760px) {
   body { font-size: 14px; }.page-width { width: calc(100% - 20px); }
-  .brand-header__inner { width: calc(100% - 26px); height: 70px; }.brand-lockup__mark { width: 37px; height: 37px; }.brand-lockup__type small { display: none; }.sync-pill span { display: none; }.sync-pill { min-width: 37px; padding: 0; justify-content: center; }
+  .brand-header__inner { width: calc(100% - 26px); height: 70px; }.brand-lockup__mark { width: 37px; height: 37px; }.brand-lockup__type small { display: none; }.sync-pill span { display: none; }.sync-pill { min-width: 37px; padding: 0; justify-content: center; }.install-button span { display: none; }.install-button { min-width: 37px; padding: 0; justify-content: center; }
   .home-screen { padding-top: 10px; }.home-toolbar { min-height: 0; display: grid; padding: 24px 20px; border-radius: 17px; }.home-toolbar__actions { justify-content: stretch; }.home-toolbar__actions .button { flex: 1 1 145px; }.home-hero { grid-template-columns: 1fr; min-height: 0; border-radius: 21px; }.home-hero__copy { padding: 33px 24px 28px; }.home-hero h1 { font-size: clamp(2.8rem, 14vw, 4.7rem); }.home-hero__copy > p:not(.eyebrow) { font-size: .9rem; }.home-hero__actions { margin-top: 25px; }.home-hero__actions .button { flex: 1 1 150px; }.home-hero__terrain { min-height: 260px; }.home-hero__terrain::after { background: linear-gradient(180deg, var(--forest), transparent 25%), repeating-linear-gradient(0deg, transparent 0 15px, rgb(247 228 179 / .09) 16px 17px); }
   .derby-library { padding-top: 34px; }.derby-card-grid { grid-template-columns: 1fr; }.empty-card { grid-template-columns: auto 1fr; }.empty-card .text-button { grid-column: 1 / -1; }
   .derby-screen { padding-top: 9px; }.derby-banner { grid-template-columns: 1fr; border-radius: 21px; }.derby-banner__copy { padding: 30px 23px 26px; }.derby-banner h1 { font-size: clamp(2.8rem, 14vw, 4.6rem); }.derby-banner__facts { margin-top: 28px; justify-content: space-between; gap: 12px; }.derby-banner__leader { min-height: 142px; display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; align-items: center; padding: 21px 23px; text-align: left; border-top: 1px solid rgb(243 229 197 / .17); border-left: 0; }.leader-kicker { grid-column: 1; }.derby-banner__leader > strong { grid-column: 1; margin-top: 4px; font-size: 2.6rem; }.derby-banner__leader > p { display: none; }.derby-banner__leader .button { grid-column: 2; grid-row: 1 / 3; }

@@ -11,13 +11,16 @@ import { syncService } from './sync';
 import { resumableCatchDraft } from './data/catchDraft';
 import { isDerbyComplete } from './domain/derbyLifecycle';
 import { useAppRoute } from './components/useAppRoute';
+import { useInstallPrompt } from './components/useInstallPrompt';
+import { InstallSheet } from './components/InstallSheet';
 
-type SheetName = 'create' | 'join' | 'profile' | 'catch' | null;
+type SheetName = 'create' | 'join' | 'profile' | 'catch' | 'install' | null;
 
 export default function App() {
   const [ready, setReady] = useState(false);
   const [fatalError, setFatalError] = useState('');
   const { route, navigate } = useAppRoute();
+  const install = useInstallPrompt();
   const [sheet, setSheet] = useState<SheetName>(null);
   const [notice, setNotice] = useState('');
   const settings = useLiveQuery(() => db.settings.get('app'), []);
@@ -87,7 +90,7 @@ export default function App() {
 
   return (
     <div className="app-canvas">
-      <BrandHeader user={user} showSync={!selectedDerby} onHome={goHome} onProfile={() => setSheet('profile')} />
+      <BrandHeader user={user} showSync={!selectedDerby} onHome={goHome} onProfile={() => setSheet('profile')} install={install.state} onShowInstall={() => setSheet('install')} />
 
       {selectedDerby ? (
         <DerbyScreen key={selectedDerby.id} derby={selectedDerby} tab={route.section} onTabChange={(section, replace) => navigate({ ...route, section }, replace)} currentUser={user} suspendPhotos={sheet === 'catch'} onBack={goHome} onLogCatch={() => setSheet('catch')} />
@@ -101,6 +104,7 @@ export default function App() {
       {sheet === 'join' && <JoinDerbySheet onClose={() => setSheet(null)} onJoined={derby => { navigate({ derbyId: derby.id, section: isDerbyComplete(derby) ? 'standings' : 'feed', history: false }); setSheet(null); }} />}
       {sheet === 'profile' && <ProfileSheet user={user} onClose={() => setSheet(null)} />}
       {sheet === 'catch' && selectedDerby && <CatchSheet key={selectedDerby.id} derby={selectedDerby} userId={settings.currentUserId} onClose={() => setSheet(null)} onSaved={(message) => { setSheet(null); setNotice(message || 'Catch saved.'); }} />}
+      {sheet === 'install' && <InstallSheet onClose={() => { install.dismiss(); setSheet(null); }} />}
       {notice && <div className="toast" role="status">{notice}</div>}
     </div>
   );

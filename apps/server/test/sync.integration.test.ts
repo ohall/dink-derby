@@ -1,6 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import type { Derby, DerbyParticipant, Device, SyncOutboxItem, User } from '@dink-derby/shared-types';
+
+vi.mock('../src/storage', async importOriginal => ({
+  ...await importOriginal<typeof import('../src/storage')>(),
+  createMediaDownload: vi.fn(async (path: string) => `https://photos.example.test/${path}`),
+}));
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 if (testDatabaseUrl) {
@@ -180,7 +185,7 @@ integration('Postgres sync integration', () => {
     const reopen = { ...finishOp, id: 'reopen-denied', payload: derby };
     expect((await processSync(deviceA.id, userA.id, [reopen])).rejected).toHaveLength(1);
   });
-  it('enforces creator-only removal, preserves history, and blocks every removed-member write/read path', async () => {
+  it('enforces creator-only removal, retains read-only history, and blocks removed-member writes', async () => {
     const url = `/derbies/${derby.id}/anglers/${userB.id}/remove`;
     const { eq } = await import('drizzle-orm');
     const [guest] = await database.select().from(schema.derbyParticipants).where(eq(schema.derbyParticipants.userId, userB.id));
@@ -210,9 +215,12 @@ integration('Postgres sync integration', () => {
     expect(ownerSnapshot.events.filter(event => event.type === 'derbyParticipant.removed')).toHaveLength(1);
     const removedSnapshot = await processSync(deviceB.id, userB.id, []);
     expect(removedSnapshot.removedDerbyIds).toEqual([derby.id]);
-    for (const field of ['derbies', 'derbyParticipants', 'catches', 'chatMessages', 'reactions', 'media'] as const) expect(removedSnapshot.patches[field]).toEqual([]);
-    expect(removedSnapshot.events).toEqual([]);
-    await expect(processSync(deviceB.id, userB.id, [], undefined, 0, derby.id)).rejects.toMatchObject({ statusCode: 403 });
+    for (const field of ['derbies', 'derbyParticipants', 'catches', 'chatMessages', 'reactions', 'media'] as const) expect(removedSnapshot.patches[field]).toEqual(ownerSnapshot.patches[field]);
+    expect(removedSnapshot.events).toEqual(ownerSnapshot.events);
+    const restoredHistory = await processSync('history-new-device', userB.id, [], undefined, 0, derby.id);
+    expect(restoredHistory.patches.derbies[0].status).toBe('finished');
+    expect(restoredHistory.patches.catches.some(item => item.userId === userB.id)).toBe(true);
+    await expect(processSync('outsider-device', 'integration-outsider', [], undefined, 0, derby.id)).rejects.toMatchObject({ statusCode: 403 });
     const rejoin = await server.inject({ method: 'POST', url: '/join', payload: { inviteCode: derby.inviteCode, user: userB, device: deviceB } });
     expect(rejoin.statusCode).toBe(403); expect(rejoin.json().message).toContain('cannot rejoin');
     for (const entityType of ['catch', 'chatMessage', 'reaction', 'media', 'derbyParticipant'] as const) {
@@ -222,7 +230,10 @@ integration('Postgres sync integration', () => {
     for (const request of [
       { method: 'POST' as const, url: '/media/upload-url', payload: { mediaId: 'removal-photo', contentType: 'image/jpeg' } },
       { method: 'POST' as const, url: '/media/removal-photo/complete', payload: { path: `${derby.id}/removal-photo.jpg` } },
-      { method: 'GET' as const, url: '/media/removal-photo/download-url' },
     ]) expect((await server.inject({ ...request, headers: { 'x-dink-user-id': userB.id } })).statusCode).toBe(403);
+    const photo = await server.inject({ method: 'GET', url: '/media/removal-photo/download-url', headers: { 'x-dink-user-id': userB.id } });
+    expect(photo.statusCode).toBe(200);
+    expect(photo.json().signedUrl).toContain('/removal-photo.jpg');
+    expect((await server.inject({ method: 'GET', url: '/media/removal-photo/download-url', headers: { 'x-dink-user-id': 'integration-outsider' } })).statusCode).toBe(403);
   });
 });

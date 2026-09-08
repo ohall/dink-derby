@@ -243,7 +243,9 @@ export async function processSync(
 
   const memberships = await db.select().from(derbyParticipants).where(eq(derbyParticipants.userId, userId));
   const removedDerbyIds = memberships.filter(membership => membership.removedAt).map(membership => membership.derbyId);
-  const visibleDerbyIds = memberships.filter(membership => !membership.removedAt).map((membership) => membership.derbyId);
+  // Participation can end, but an angler keeps read-only history for every
+  // derby they joined. Write authorization still requires active membership.
+  const visibleDerbyIds = memberships.map((membership) => membership.derbyId);
   if (requestedDerbyId && !visibleDerbyIds.includes(requestedDerbyId)) {
     throw Object.assign(new Error('You have not joined that derby.'), { statusCode: 403 });
   }

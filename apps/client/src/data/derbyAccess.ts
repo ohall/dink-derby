@@ -3,7 +3,7 @@ import { db } from '../db';
 
 export async function assertDerbyAccess(derbyId: string) {
   const settings = await db.settings.get('app');
-  if (settings?.removedDerbyIds?.includes(derbyId)) throw new Error('The creator removed you from this derby.');
+  if (settings?.removedDerbyIds?.includes(derbyId)) throw new Error('The creator removed you from this derby. Your history is read-only.');
 }
 
 /** Run inside the sync transaction, including settings and syncOutbox tables. */

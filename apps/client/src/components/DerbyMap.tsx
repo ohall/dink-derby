@@ -6,8 +6,8 @@ import { catchScore, formatScore, scoringLabel } from '../domain/leaderboard';
 import { isDerbyComplete } from '../domain/derbyLifecycle';
 import type { CatchMapCanvasProps } from './CatchMapCanvas';
 
-export function DerbyMap({ derby, catches, users, currentUserId, suspended }: {
-  derby: Derby; catches: Catch[]; users: User[]; currentUserId?: string; suspended?: boolean;
+export function DerbyMap({ derby, catches, users, currentUserId, suspended, readOnly }: {
+  derby: Derby; catches: Catch[]; users: User[]; currentUserId?: string; suspended?: boolean; readOnly?: boolean;
 }) {
   const [scope, setScope] = useState<'mine' | 'all'>(currentUserId ? 'mine' : 'all');
   const [selectedId, setSelectedId] = useState<string>();
@@ -47,7 +47,7 @@ export function DerbyMap({ derby, catches, users, currentUserId, suspended }: {
     </div>
     {missingCount > 0 && <p className="map-missing">{missingCount} catch{missingCount === 1 ? ' has' : 'es have'} no saved location.</p>}
     {!hasPoints ? <div className="map-empty"><MapPin size={32} aria-hidden="true" /><h3>No catch locations {scope === 'mine' ? 'for you ' : ''}yet</h3>
-      <p>{isDerbyComplete(derby) ? 'Only locations saved with a catch can be shown. Earlier locations cannot be recovered.' : 'New catches include your location by default. Allow location access when saving, or uncheck “Include my location” to save without it.'}</p>
+      <p>{readOnly || isDerbyComplete(derby) ? 'Only locations saved with a catch can be shown. Earlier locations cannot be recovered.' : 'New catches include your location by default. Allow location access when saving, or uncheck “Include my location” to save without it.'}</p>
       {scope === 'mine' && <button type="button" className="button button--paper" onClick={() => changeScope('all')}>Show all anglers’ catches</button>}
     </div> : <>
       {suspended ? <p className="map-loading">Map paused while you log a catch.</p> : Canvas ?

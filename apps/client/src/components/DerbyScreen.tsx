@@ -43,6 +43,7 @@ type DerbyScreenProps = {
   onBack: () => void;
   onLogCatch: () => void;
   suspendPhotos?: boolean;
+  isFormerParticipant?: boolean;
 };
 
 function formatRemaining(endsAt?: string) {
@@ -78,12 +79,13 @@ function ReactionIcon({ kind, reacted }: { kind: Reaction['reaction']; reacted: 
   }
 }
 
-function ReactionBar({ derbyId, targetType, targetId, reactions, currentUserId }: {
+function ReactionBar({ derbyId, targetType, targetId, reactions, currentUserId, readOnly }: {
   derbyId: string;
   targetType: Reaction['targetType'];
   targetId: string;
   reactions: Reaction[];
   currentUserId?: string;
+  readOnly?: boolean;
 }) {
   return (
     <div className="reaction-bar">
@@ -97,6 +99,7 @@ function ReactionBar({ derbyId, targetType, targetId, reactions, currentUserId }
             type="button"
             aria-label={`${kind} reaction`}
             aria-pressed={reacted}
+            disabled={readOnly}
             onClick={() => void toggleReaction(derbyId, targetType, targetId, kind)}
           >
             <ReactionIcon kind={kind} reacted={reacted} />
@@ -138,7 +141,7 @@ function LocalPhoto({ mediaId, alt }: { mediaId?: string; alt: string }) {
   return <img className="catch-photo" src={url} alt={alt} loading="lazy" decoding="async" />;
 }
 
-export function DerbyScreen({ derby, tab, onTabChange: setTab, currentUser, onBack, onLogCatch, suspendPhotos }: DerbyScreenProps) {
+export function DerbyScreen({ derby, tab, onTabChange: setTab, currentUser, onBack, onLogCatch, suspendPhotos, isFormerParticipant = false }: DerbyScreenProps) {
   const complete = isDerbyComplete(derby);
   const wasComplete = useRef(complete);
   const [confirmFinish, setConfirmFinish] = useState(false);
@@ -231,12 +234,13 @@ export function DerbyScreen({ derby, tab, onTabChange: setTab, currentUser, onBa
   }
 
   const removedCatches = catches.filter(item => item.deletedAt && item.userId === currentUser?.id);
+  const personalCatchCount = catches.filter(item => item.userId === currentUser?.id && !item.deletedAt).length;
 
   return (
     <main className="derby-screen page-width">
       <div className="derby-topline">
         <button className="back-button" type="button" onClick={onBack}><ArrowLeft size={19} /> All derbies</button>
-        <button className="invite-button" type="button" onClick={() => setInviteOpen(true)}><Users size={17} /> Invite anglers</button>
+        {!isFormerParticipant && <button className="invite-button" type="button" onClick={() => setInviteOpen(true)}><Users size={17} /> Invite anglers</button>}
       </div>
 
       <section className="derby-banner">
@@ -266,6 +270,13 @@ export function DerbyScreen({ derby, tab, onTabChange: setTab, currentUser, onBa
         {sync.rejectedEditCount > 0 && <button type="button" onClick={() => void syncService.dismissRejectedEdits().catch(() => setToast('Could not dismiss the rejected edit. Try again.'))}>Use server version</button>}
       </div>
 
+      {isFormerParticipant && <section className="completion-summary" aria-label="Your derby history">
+        <h2>Your derby history</h2>
+        <p>Your participation ended. You can still view this derby’s results, catches, photos, map, and chat history.</p>
+        <p>You logged {personalCatchCount} catch{personalCatchCount === 1 ? '' : 'es'}. Your catches remain in history but no longer count in standings.</p>
+        <p className="completion-note">Read-only · You cannot add or edit catches, post, invite anglers, or rejoin.{!complete && ' This derby is still in progress; results will update when it finishes.'}</p>
+      </section>}
+
       {complete && <section className="completion-summary" aria-label="Derby results summary">
         <p className="eyebrow">{winners.length > 1 ? 'JOINT WINNERS' : 'WINNER'}</p>
         <h2>{winners.length ? winners.map(row => row.displayName).join(' & ') : 'No scoring catches'}</h2>
@@ -281,7 +292,7 @@ export function DerbyScreen({ derby, tab, onTabChange: setTab, currentUser, onBa
         <button type="button" className={tab === 'rules' || tab === 'activity' ? 'active' : ''} aria-pressed={tab === 'rules' || tab === 'activity'} onClick={() => setTab('rules')}><Ruler size={18} /> Rules & info</button>
       </nav>
 
-      {tab === 'map' && <DerbyMap derby={derby} catches={catches} users={users} currentUserId={currentUser?.id} suspended={suspendPhotos} />}
+      {tab === 'map' && <DerbyMap derby={derby} catches={catches} users={users} currentUserId={currentUser?.id} suspended={suspendPhotos} readOnly={isFormerParticipant} />}
 
       {tab === 'feed' && (
         <section className="feed-layout">
@@ -301,7 +312,7 @@ export function DerbyScreen({ derby, tab, onTabChange: setTab, currentUser, onBa
                       <div>
                         <p><strong>{author}</strong> {entry.item.text}</p>
                         <small>{relativeTime(entry.item.sentAt)} {entry.item.isPendingSync ? '· saved here' : ''}</small>
-                        <ReactionBar derbyId={derby.id} targetType="chatMessage" targetId={entry.item.id} reactions={reactions} currentUserId={currentUser?.id} />
+                        <ReactionBar derbyId={derby.id} targetType="chatMessage" targetId={entry.item.id} reactions={reactions} currentUserId={currentUser?.id} readOnly={isFormerParticipant} />
                       </div>
                     </article>
                   );
@@ -313,7 +324,7 @@ export function DerbyScreen({ derby, tab, onTabChange: setTab, currentUser, onBa
                     <header>
                       <span className="mini-avatar mini-avatar--gold">{initials(author)}</span>
                       <div><strong>{author}</strong><small>{relativeTime(item.caughtAt)} · {item.isPendingSync ? 'saved on this phone' : 'synced'}</small></div>
-                      {!complete && item.userId === currentUser?.id && <button className="catch-edit-button" type="button" onClick={() => setEditingCatch(item)}><Pencil size={16} /> Edit catch</button>}
+                      {!complete && !isFormerParticipant && item.userId === currentUser?.id && <button className="catch-edit-button" type="button" onClick={() => setEditingCatch(item)}><Pencil size={16} /> Edit catch</button>}
                       {item.isPendingSync && <span className="pending-tag">PENDING</span>}
                     </header>
                     <LocalPhoto mediaId={suspendPhotos ? undefined : item.photoMediaId} alt={`${item.species || 'Fish'} logged by ${author}`} />
@@ -322,7 +333,7 @@ export function DerbyScreen({ derby, tab, onTabChange: setTab, currentUser, onBa
                       <strong className="catch-measure">{measure ?? '—'}<small>{scoringLabel(derby)}</small></strong>
                     </div>
                     <footer>
-                      <ReactionBar derbyId={derby.id} targetType="catch" targetId={item.id} reactions={reactions} currentUserId={currentUser?.id} />
+                      <ReactionBar derbyId={derby.id} targetType="catch" targetId={item.id} reactions={reactions} currentUserId={currentUser?.id} readOnly={isFormerParticipant} />
                       <span>{removedAnglerIds.has(item.userId) ? 'Angler removed · not scored' : !catchWithinDerby(derby, item) ? 'Outside derby cutoff · not scored' : item.isPendingSync ? 'Provisional score' : 'Counts in standings'}</span>
                     </footer>
                   </article>
@@ -332,15 +343,15 @@ export function DerbyScreen({ derby, tab, onTabChange: setTab, currentUser, onBa
 
             {removedCatches.length > 0 && <details className="removed-catches"><summary>Removed catches ({removedCatches.length})</summary>
               {removedCatches.map(item => <div key={item.id}><span>{item.species || 'Fish'} · {new Date(item.caughtAt).toLocaleString()}</span>
-                {!complete && <button className="button button--paper" type="button" disabled={!!restoringId} onClick={() => void restoreCatch(item.id)}>{restoringId === item.id ? 'Restoring…' : 'Restore catch'}</button>}</div>)}
+                {!complete && !isFormerParticipant && <button className="button button--paper" type="button" disabled={!!restoringId} onClick={() => void restoreCatch(item.id)}>{restoringId === item.id ? 'Restoring…' : 'Restore catch'}</button>}</div>)}
               {complete && <p>This derby is closed. Removed catches do not count in results.</p>}
             </details>}
 
-            <form className="chat-composer" onSubmit={submitMessage}>
+            {!isFormerParticipant && <form className="chat-composer" onSubmit={submitMessage}>
               <label className="sr-only" htmlFor="derby-chat">Message the derby</label>
               <input id="derby-chat" value={message} disabled={sending} onChange={(event) => setMessage(event.target.value)} placeholder="Message the derby" maxLength={300} />
               <button type="submit" aria-label="Send message" disabled={sending || !message.trim()}><Send size={18} /><span>{sending ? 'Sending…' : 'Send'}</span></button>
-            </form>
+            </form>}
             {messageError && <p className="form-error" role="alert">{messageError}</p>}
           </div>
 
@@ -394,12 +405,12 @@ export function DerbyScreen({ derby, tab, onTabChange: setTab, currentUser, onBa
         </section>
       )}
 
-      {!complete && <div className="catch-action-bar"><button className="button button--primary" type="button" onClick={onLogCatch}><Fish size={20} /> Log a catch</button></div>}
-      {editingCatch && <EditCatchSheet key={editingCatch.id} item={editingCatch} derby={derby} onClose={() => setEditingCatch(undefined)} onSaved={removed => {
+      {!complete && !isFormerParticipant && <div className="catch-action-bar"><button className="button button--primary" type="button" onClick={onLogCatch}><Fish size={20} /> Log a catch</button></div>}
+      {editingCatch && !isFormerParticipant && <EditCatchSheet key={editingCatch.id} item={editingCatch} derby={derby} onClose={() => setEditingCatch(undefined)} onSaved={removed => {
         setEditingCatch(undefined); setCatchNotice(removed ? 'Catch removed. You can restore it under Removed catches while the derby is active.' : 'Catch updated. Standings updated on this device.');
       }} />}
       {anglersOpen && <AnglersSheet derby={derby} participants={participants} users={users} userId={currentUser?.id} onClose={() => setAnglersOpen(false)} />}
-      {inviteOpen && <Sheet titleId="invite-title" onClose={() => setInviteOpen(false)}>
+      {inviteOpen && !isFormerParticipant && <Sheet titleId="invite-title" onClose={() => setInviteOpen(false)}>
         <h2 id="invite-title">Invite anglers</h2>
         <p className="sheet__intro">Show this QR code to another angler, or share the invite code below.</p>
         {derby.inviteCode && <InviteQr code={derby.inviteCode} name={derby.name} />}

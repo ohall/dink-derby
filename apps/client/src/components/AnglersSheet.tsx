@@ -37,9 +37,9 @@ export function AnglersSheet({ derby, participants, users, userId, onClose }: {
     {selected ? <>
       <h2 id="anglers-title">Remove {name(selected)}?</h2>
       <p className="sheet__intro">Remove this angler from {derby.name}?</p>
-      <p>They will lose access and this profile cannot rejoin using an invite code or QR code.</p>
+      <p>They will keep read-only derby history, but cannot add catches, post, or rejoin using an invite code or QR code.</p>
       <p>Existing catches and messages stay in derby history, but their catches no longer count in standings or biggest fish. This cannot be undone here.</p>
-      <p>Their phone updates when it next connects. Previously downloaded content cannot be recalled.</p>
+      <p>The derby stays in their Past derbies. Their phone updates when it next connects.</p>
       {error && <p role="alert" className="form-error">{error}</p>}
       <div className="finish-actions">
         <button autoFocus type="button" className="button button--paper" disabled={removing} onClick={() => { setSelected(undefined); setError(''); }}>Keep angler</button>

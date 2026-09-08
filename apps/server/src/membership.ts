@@ -9,10 +9,16 @@ export function participantRecord(record: typeof derbyParticipants.$inferSelect)
     isAdmin: record.isAdmin, createdAt: record.createdAt.toISOString(), removedAt: record.removedAt?.toISOString() };
 }
 
-export async function requireActiveMembership(derbyId: string, userId: string) {
+export async function requireHistoryMembership(derbyId: string, userId: string) {
   const [membership] = await db.select().from(derbyParticipants)
     .where(and(eq(derbyParticipants.derbyId, derbyId), eq(derbyParticipants.userId, userId))).limit(1);
-  if (!membership || membership.removedAt) throw httpError(403, 'You no longer have access to this derby.');
+  if (!membership) throw httpError(403, 'You have not joined this derby.');
+  return membership;
+}
+
+export async function requireActiveMembership(derbyId: string, userId: string) {
+  const membership = await requireHistoryMembership(derbyId, userId);
+  if (membership.removedAt) throw httpError(403, 'Your participation ended. Derby history is read-only.');
   return membership;
 }
 

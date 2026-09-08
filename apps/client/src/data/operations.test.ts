@@ -131,6 +131,7 @@ describe('catch drafts', () => {
     expect((await openCatchDraft('open-derby', 'user')).species).toBe('');
   });
   it('restores details and a prepared photo after reopening the database', async () => {
+    await db.derbies.put(derby);
     const draft = await openCatchDraft(derby.id, 'user');
     await db.catchDrafts.update(draft.id, { measurement: '18.5', note: 'By the dock', photo });
     db.close();

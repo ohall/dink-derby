@@ -1,4 +1,5 @@
 import { db, type CatchDraft } from '../db';
+import { isDerbyInHistory } from '../domain/derbyLifecycle';
 
 export async function openCatchDraft(derbyId: string, userId: string, defaultSpecies = ''): Promise<CatchDraft> {
   return db.transaction('rw', db.catchDrafts, async () => {
@@ -17,5 +18,9 @@ export async function openCatchDraft(derbyId: string, userId: string, defaultSpe
 
 export async function resumableCatchDraft(userId: string) {
   const drafts = await db.catchDrafts.where('userId').equals(userId).filter(draft => draft.isOpen).sortBy('updatedAt');
-  return drafts[drafts.length - 1];
+  const settings = await db.settings.get('app');
+  for (const draft of drafts.reverse()) {
+    const derby = await db.derbies.get(draft.derbyId);
+    if (derby && !isDerbyInHistory(derby, settings?.removedDerbyIds)) return draft;
+  }
 }

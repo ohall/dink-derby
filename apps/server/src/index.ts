@@ -26,7 +26,7 @@ import { authenticate, httpError } from './auth';
 import { createMediaDownload, createMediaUpload, mediaBucket } from './storage';
 import { identifyCatch, isIdentifyConfigured } from './identify';
 import { lookupNearbyWaters } from './nearbyWaters';
-import { removeAngler, requireActiveMembership } from './membership';
+import { removeAngler, requireActiveMembership, requireHistoryMembership } from './membership';
 
 type SyncProcessor = typeof processSync;
 
@@ -213,7 +213,7 @@ export const buildServer = (syncProcessor: SyncProcessor = processSync, waterLoo
     const actorId = await authenticate(request);
     const [record] = await db.select().from(media).where(eq(media.id, params.id)).limit(1);
     if (!record?.remoteUrl) throw httpError(404, 'That catch photo has not finished uploading.');
-    await requireActiveMembership(record.derbyId, actorId);
+    await requireHistoryMembership(record.derbyId, actorId);
     return MediaDownloadResponseSchema.parse({ signedUrl: await createMediaDownload(record.remoteUrl) });
   });
 

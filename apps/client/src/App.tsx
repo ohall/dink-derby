@@ -9,7 +9,7 @@ import { db } from './db';
 import { initializeIdentity } from './data/identity';
 import { syncService } from './sync';
 import { resumableCatchDraft } from './data/catchDraft';
-import { isDerbyComplete } from './domain/derbyLifecycle';
+import { isDerbyComplete, isDerbyInHistory } from './domain/derbyLifecycle';
 import { useAppRoute } from './components/useAppRoute';
 import { useInstallPrompt } from './components/useInstallPrompt';
 import { InstallSheet } from './components/InstallSheet';
@@ -38,14 +38,14 @@ export default function App() {
     return items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }, []);
   const removedDerbyIds = settings?.removedDerbyIds ?? [];
-  const derbies = (derbyQuery ?? []).filter(derby => !removedDerbyIds.includes(derby.id));
+  const derbies = derbyQuery ?? [];
   const catches = useLiveQuery(() => db.catches.toArray(), []) ?? [];
   const selectedDerby = derbies.find((derby) => derby.id === route.derbyId);
   const openDerby = (id: string) => {
     const derby = derbies.find(item => item.id === id);
-    navigate({ derbyId: id, section: derby && isDerbyComplete(derby) ? 'standings' : 'feed', history: false });
+    navigate({ derbyId: id, section: derby && isDerbyInHistory(derby, removedDerbyIds) ? 'standings' : 'feed', history: false });
   };
-  const goHome = () => navigate({ section: 'feed', history: selectedDerby ? isDerbyComplete(selectedDerby) : route.history });
+  const goHome = () => navigate({ section: 'feed', history: selectedDerby ? isDerbyInHistory(selectedDerby, removedDerbyIds) : route.history });
   const closeInvite = () => { clearInviteFromUrl(); setInvite(undefined); setSheet(null); };
 
   useEffect(() => {
@@ -108,20 +108,18 @@ export default function App() {
     <div className="app-canvas">
       <BrandHeader user={user} showSync={!selectedDerby} onHome={goHome} onProfile={() => setSheet('profile')} install={install.state} onShowInstall={() => setSheet('install')} />
 
-      {route.derbyId && removedDerbyIds.includes(route.derbyId) ? (
-        <main className="page-width single-panel"><h1>You were removed from this derby</h1><p>The creator removed your access. This profile cannot rejoin with an invite code or QR code.</p><p>Your previously saved catches remain on this phone, but will no longer sync to this derby.</p><button className="button button--primary" type="button" onClick={goHome}>All derbies</button></main>
-      ) : selectedDerby ? (
-        <DerbyScreen key={selectedDerby.id} derby={selectedDerby} tab={route.section} onTabChange={(section, replace) => navigate({ ...route, section }, replace)} currentUser={user} suspendPhotos={sheet === 'catch'} onBack={goHome} onLogCatch={() => setSheet('catch')} />
+      {selectedDerby ? (
+        <DerbyScreen key={selectedDerby.id} derby={selectedDerby} isFormerParticipant={removedDerbyIds.includes(selectedDerby.id)} tab={route.section} onTabChange={(section, replace) => navigate({ ...route, section }, replace)} currentUser={user} suspendPhotos={sheet === 'catch' && !removedDerbyIds.includes(selectedDerby.id)} onBack={goHome} onLogCatch={() => setSheet('catch')} />
       ) : route.derbyId ? (
         <main className="page-width single-panel"><h1>Derby not on this device</h1><p>Scan a participant’s QR code or enter their invite code. If you have already joined, wait for this device to sync.</p><div className="finish-actions"><button className="button button--primary" type="button" onClick={() => setSheet('join')}>Join a derby</button><button className="button button--paper" type="button" onClick={goHome}>All derbies</button></div></main>
       ) : (
-        <HomeScreen user={user} derbies={derbies} catches={catches} history={route.history} onHistoryChange={history => navigate({ section: 'feed', history })} onOpenDerby={openDerby} onCreate={() => setSheet('create')} onJoin={() => setSheet('join')} />
+        <HomeScreen user={user} derbies={derbies} removedDerbyIds={removedDerbyIds} catches={catches} history={route.history} onHistoryChange={history => navigate({ section: 'feed', history })} onOpenDerby={openDerby} onCreate={() => setSheet('create')} onJoin={() => setSheet('join')} />
       )}
 
       {sheet === 'create' && <CreateDerbySheet onClose={() => setSheet(null)} onCreated={derby => { navigate({ derbyId: derby.id, section: 'feed', history: false }); setSheet(null); }} />}
       {sheet === 'join' && <JoinDerbySheet key={invite ?? 'manual'} initialCode={invite} invalidLink={invite === ''} onClose={closeInvite} onJoined={derby => { closeInvite(); navigate({ derbyId: derby.id, section: isDerbyComplete(derby) ? 'standings' : 'feed', history: false }); }} />}
       {sheet === 'profile' && <ProfileSheet user={user} onClose={() => setSheet(invite !== undefined ? 'join' : null)} />}
-      {sheet === 'catch' && selectedDerby && <CatchSheet key={`catch-${selectedDerby.id}`} derby={selectedDerby} userId={settings.currentUserId} onClose={() => setSheet(null)} onSaved={(message) => { setSheet(null); setNotice(message || 'Catch saved.'); }} />}
+      {sheet === 'catch' && selectedDerby && !removedDerbyIds.includes(selectedDerby.id) && <CatchSheet key={`catch-${selectedDerby.id}`} derby={selectedDerby} userId={settings.currentUserId} onClose={() => setSheet(null)} onSaved={(message) => { setSheet(null); setNotice(message || 'Catch saved.'); }} />}
       {sheet === 'install' && <InstallSheet onClose={() => { install.dismiss(); setSheet(null); }} />}
       {notice && <div className="toast" role="status">{notice}</div>}
     </div>

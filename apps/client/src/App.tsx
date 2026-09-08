@@ -13,8 +13,15 @@ import { isDerbyComplete } from './domain/derbyLifecycle';
 import { useAppRoute } from './components/useAppRoute';
 import { useInstallPrompt } from './components/useInstallPrompt';
 import { InstallSheet } from './components/InstallSheet';
+import { clearInviteFromUrl, parseDerbyInvite } from './domain/invites';
 
 type SheetName = 'create' | 'join' | 'profile' | 'catch' | 'install' | null;
+
+function incomingInvite() {
+  const url = new URL(window.location.href);
+  const hasInvite = url.searchParams.has('join') || new URLSearchParams(url.hash.slice(1)).has('join');
+  return hasInvite ? parseDerbyInvite(url.href, url.origin) ?? '' : undefined;
+}
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -22,6 +29,7 @@ export default function App() {
   const { route, navigate } = useAppRoute();
   const install = useInstallPrompt();
   const [sheet, setSheet] = useState<SheetName>(null);
+  const [invite, setInvite] = useState(incomingInvite);
   const [notice, setNotice] = useState('');
   const settings = useLiveQuery(() => db.settings.get('app'), []);
   const user = useLiveQuery(() => settings?.currentUserId ? db.users.get(settings.currentUserId) : undefined, [settings?.currentUserId]);
@@ -37,6 +45,7 @@ export default function App() {
     navigate({ derbyId: id, section: derby && isDerbyComplete(derby) ? 'standings' : 'feed', history: false });
   };
   const goHome = () => navigate({ section: 'feed', history: selectedDerby ? isDerbyComplete(selectedDerby) : route.history });
+  const closeInvite = () => { clearInviteFromUrl(); setInvite(undefined); setSheet(null); };
 
   useEffect(() => {
     let active = true;
@@ -48,6 +57,7 @@ export default function App() {
         if (!active) return;
         syncService.start();
         if (isNew) setSheet('profile');
+        else if (invite !== undefined) setSheet('join');
         else {
           const draft = await resumableCatchDraft(identityUser.id);
           if (!active) return;
@@ -69,10 +79,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const closeOnBack = () => setSheet(null);
-    window.addEventListener('popstate', closeOnBack);
-    return () => window.removeEventListener('popstate', closeOnBack);
-  }, []);
+    if (!ready) return;
+    const openIncomingInvite = () => {
+      const next = incomingInvite();
+      setInvite(next); setSheet(next !== undefined ? 'join' : null);
+    };
+    window.addEventListener('popstate', openIncomingInvite);
+    window.addEventListener('hashchange', openIncomingInvite);
+    return () => { window.removeEventListener('popstate', openIncomingInvite); window.removeEventListener('hashchange', openIncomingInvite); };
+  }, [ready]);
 
   useEffect(() => {
     if (!notice) return;
@@ -95,14 +110,14 @@ export default function App() {
       {selectedDerby ? (
         <DerbyScreen key={selectedDerby.id} derby={selectedDerby} tab={route.section} onTabChange={(section, replace) => navigate({ ...route, section }, replace)} currentUser={user} suspendPhotos={sheet === 'catch'} onBack={goHome} onLogCatch={() => setSheet('catch')} />
       ) : route.derbyId ? (
-        <main className="page-width single-panel"><h1>Derby not on this device</h1><p>Join with the organizer’s invite code, or return to your derbies. If you have already joined, wait for this device to sync.</p><div className="finish-actions"><button className="button button--primary" type="button" onClick={() => setSheet('join')}>Join with code</button><button className="button button--paper" type="button" onClick={goHome}>All derbies</button></div></main>
+        <main className="page-width single-panel"><h1>Derby not on this device</h1><p>Scan a participant’s QR code or enter their invite code. If you have already joined, wait for this device to sync.</p><div className="finish-actions"><button className="button button--primary" type="button" onClick={() => setSheet('join')}>Join a derby</button><button className="button button--paper" type="button" onClick={goHome}>All derbies</button></div></main>
       ) : (
         <HomeScreen user={user} derbies={derbies} catches={catches} history={route.history} onHistoryChange={history => navigate({ section: 'feed', history })} onOpenDerby={openDerby} onCreate={() => setSheet('create')} onJoin={() => setSheet('join')} />
       )}
 
       {sheet === 'create' && <CreateDerbySheet onClose={() => setSheet(null)} onCreated={derby => { navigate({ derbyId: derby.id, section: 'feed', history: false }); setSheet(null); }} />}
-      {sheet === 'join' && <JoinDerbySheet onClose={() => setSheet(null)} onJoined={derby => { navigate({ derbyId: derby.id, section: isDerbyComplete(derby) ? 'standings' : 'feed', history: false }); setSheet(null); }} />}
-      {sheet === 'profile' && <ProfileSheet user={user} onClose={() => setSheet(null)} />}
+      {sheet === 'join' && <JoinDerbySheet key={invite ?? 'manual'} initialCode={invite} invalidLink={invite === ''} onClose={closeInvite} onJoined={derby => { closeInvite(); navigate({ derbyId: derby.id, section: isDerbyComplete(derby) ? 'standings' : 'feed', history: false }); }} />}
+      {sheet === 'profile' && <ProfileSheet user={user} onClose={() => setSheet(invite !== undefined ? 'join' : null)} />}
       {sheet === 'catch' && selectedDerby && <CatchSheet key={selectedDerby.id} derby={selectedDerby} userId={settings.currentUserId} onClose={() => setSheet(null)} onSaved={(message) => { setSheet(null); setNotice(message || 'Catch saved.'); }} />}
       {sheet === 'install' && <InstallSheet onClose={() => { install.dismiss(); setSheet(null); }} />}
       {notice && <div className="toast" role="status">{notice}</div>}

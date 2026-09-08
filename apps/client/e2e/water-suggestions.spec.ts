@@ -112,7 +112,7 @@ test('live USGS suggestion syncs the confirmed name to a second device', async (
     await guest.goto('/');
     await guest.getByLabel('Display name').fill('Water QA guest');
     await guest.getByRole('button', { name: 'Save profile', exact: true }).click();
-    await guest.getByRole('button', { name: 'Join with code', exact: true }).click();
+    await guest.getByRole('button', { name: 'Join a derby', exact: true }).click();
     await guest.getByLabel('Invite code').fill(code);
     await guest.getByRole('button', { name: 'Join derby', exact: true }).click();
     await expect(guest.getByRole('dialog')).toHaveCount(0);

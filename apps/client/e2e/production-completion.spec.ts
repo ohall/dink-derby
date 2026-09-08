@@ -26,7 +26,7 @@ test('two identities finish a derby and reconcile a late offline catch', async (
     const invite = await owner.getByLabel('Invite code').inputValue();
     await owner.getByRole('button', { name: 'Close', exact: true }).click();
     await onboard(guest, 'Completion QA guest');
-    await guest.getByRole('button', { name: 'Join with code', exact: true }).click();
+    await guest.getByRole('button', { name: 'Join a derby', exact: true }).click();
     await guest.getByLabel('Invite code').fill(invite);
     await guest.getByRole('button', { name: 'Join derby', exact: true }).click();
     await expect(guest.getByRole('heading', { name, exact: true })).toBeVisible();

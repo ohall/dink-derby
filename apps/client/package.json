@@ -19,6 +19,8 @@
     "dexie-react-hooks": "^1.1.6",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.263.1",
+    "qr-scanner": "1.4.2",
+    "qrcode.react": "4.2.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-leaflet": "^4.2.1"

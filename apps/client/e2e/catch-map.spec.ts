@@ -135,7 +135,7 @@ test('shared coordinates sync to another angler and remain visible in historical
     const code = await owner.getByLabel('Invite code').inputValue();
     await owner.getByRole('button', { name: 'Close', exact: true }).click();
     await onboard(guest, 'Map QA guest');
-    await guest.getByRole('button', { name: 'Join with code', exact: true }).click();
+    await guest.getByRole('button', { name: 'Join a derby', exact: true }).click();
     await guest.getByLabel('Invite code').fill(code);
     await guest.getByRole('button', { name: 'Join derby', exact: true }).click();
     await expect(guest.getByRole('dialog')).toHaveCount(0);

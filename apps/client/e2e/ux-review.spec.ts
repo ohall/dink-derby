@@ -89,7 +89,7 @@ test('profile, join, invite, and chat controls give useful feedback', async ({ p
   await page.getByRole('button', { name: 'Save profile', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Join with code', exact: true }).click();
+  await page.getByRole('button', { name: 'Join a derby', exact: true }).click();
   await page.getByLabel('Invite code').fill(' dink - test1 ');
   await expect(page.getByLabel('Invite code')).toHaveValue('DINK-TEST1');
   await page.getByRole('button', { name: 'Join derby', exact: true }).click();

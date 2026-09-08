@@ -36,7 +36,7 @@ export function HomeScreen({ user, derbies, catches, onOpenDerby, onCreate, onJo
         </div>
         <div className="home-toolbar__actions">
           <button className="button button--primary" type="button" onClick={onCreate}><Plus size={20} /> Start a derby</button>
-          <button className="button button--paper" type="button" onClick={onJoin}><Ticket size={20} /> Join with code</button>
+          <button className="button button--paper" type="button" onClick={onJoin}><Ticket size={20} /> Join a derby</button>
         </div>
       </section>
 

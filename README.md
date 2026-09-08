@@ -60,6 +60,10 @@ Dink Derby works 100% offline.
 
 For deep architectural details and "The Contract," see [AGENTS.md](./AGENTS.md).
 
+## Joining by QR code
+
+Any participant can show **Invite anglers** inside a derby. Scan with a phone camera, or choose **Join a derby → Scan QR code**, then confirm **Join derby**. Entering an invite code still works. Joining requires a connection; see [QR invitations](docs/qr-invites.md) for behavior and camera safeguards.
+
 ## Deployment
 
 Dink Derby deploys as two Vercel projects from this monorepo:

@@ -30,7 +30,7 @@ test('edit, remove, restore, and navigate a derby without losing its state', asy
       const code = await page.getByLabel('Invite code').inputValue();
       await page.getByRole('button', { name: 'Close', exact: true }).click();
       await onboard(guest, 'Correction QA guest');
-      await guest.getByRole('button', { name: 'Join with code', exact: true }).click();
+      await guest.getByRole('button', { name: 'Join a derby', exact: true }).click();
       await guest.getByLabel('Invite code').fill(code);
       await guest.getByRole('button', { name: 'Join derby', exact: true }).click();
       await expect(guest.getByRole('dialog')).toHaveCount(0);

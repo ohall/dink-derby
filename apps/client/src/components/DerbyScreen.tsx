@@ -32,6 +32,7 @@ import { Sheet } from './Sheet';
 import { EditCatchSheet } from './EditCatchSheet';
 import type { DerbySection } from '../domain/navigation';
 import { DerbyMap } from './DerbyMap';
+import { InviteQr } from './InviteQr';
 
 type DerbyScreenProps = {
   derby: Derby;
@@ -395,7 +396,9 @@ export function DerbyScreen({ derby, tab, onTabChange: setTab, currentUser, onBa
       }} />}
       {inviteOpen && <Sheet titleId="invite-title" onClose={() => setInviteOpen(false)}>
         <h2 id="invite-title">Invite anglers</h2>
-        <p className="sheet__intro">Send this code to your group. They can open Dink Derby and choose Join with code.</p>
+        <p className="sheet__intro">Show this QR code to another angler, or share the invite code below.</p>
+        {derby.inviteCode && <InviteQr code={derby.inviteCode} name={derby.name} />}
+        {!complete && !!completionPending && <p role="status">This derby needs to sync before other anglers can join.</p>}
         <div className="field-form"><label><span>Invite code</span><input className="invite-code" readOnly value={derby.inviteCode || ''} onFocus={event => event.target.select()} /></label>
           <button className="button button--primary" type="button" onClick={() => void copyInvite()} disabled={!derby.inviteCode}><Copy size={18} /> Copy invite code</button>
           {copyError && <p className="form-error" role="alert">{copyError}</p>}

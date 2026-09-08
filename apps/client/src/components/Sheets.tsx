@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { Camera, Fish, HardDrive, Ruler, Scale, ShieldCheck, User as UserIcon } from 'lucide-react';
+import { Camera, Fish, HardDrive, Ruler, Scale, ScanLine, ShieldCheck, User as UserIcon } from 'lucide-react';
 import type { Derby, User } from '@dink-derby/shared-types';
 import { createDerby, joinDerby, saveCatch, updateProfile } from '../data/operations';
 import { identifyCatch } from '../lib/api';
@@ -9,6 +9,7 @@ import { useCatchDraft } from './useCatchDraft';
 import { Sheet } from './Sheet';
 import { getCatchLocation } from '../utils/location';
 import { WaterSuggestions } from './WaterSuggestions';
+import { InviteScanner } from './InviteScanner';
 
 export function CatchSheet({ derby, userId, onClose, onSaved }: { derby: Derby; userId: string; onClose: () => void; onSaved: (message?: string) => void }) {
   const { draft, update, pendingWrites, error: draftError, flush } = useCatchDraft(derby.id, userId, derby.speciesFilter || '');
@@ -216,13 +217,20 @@ export function CreateDerbySheet({ onClose, onCreated }: { onClose: () => void; 
   );
 }
 
-export function JoinDerbySheet({ onClose, onJoined }: { onClose: () => void; onJoined: (derby: Derby) => void }) {
-  const [code, setCode] = useState('');
-  const [error, setError] = useState('');
+export function JoinDerbySheet({ initialCode = '', invalidLink = false, onClose, onJoined }: { initialCode?: string; invalidLink?: boolean; onClose: () => void; onJoined: (derby: Derby) => void }) {
+  const [code, setCode] = useState(initialCode);
+  const [error, setError] = useState(invalidLink ? 'This invite link is invalid. Scan again or enter the invite code.' : '');
   const [joining, setJoining] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanned, setScanned] = useState(!!initialCode);
+  const submitting = useRef(false);
+  const joinButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => { if (scanned && !scanning) joinButton.current?.focus(); }, [scanned, scanning]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (submitting.current) return;
+    submitting.current = true;
     setJoining(true);
     setError('');
     try {
@@ -230,6 +238,7 @@ export function JoinDerbySheet({ onClose, onJoined }: { onClose: () => void; onJ
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'That derby could not be joined.');
     } finally {
+      submitting.current = false;
       setJoining(false);
     }
   }
@@ -237,12 +246,14 @@ export function JoinDerbySheet({ onClose, onJoined }: { onClose: () => void; onJ
   return (
     <Sheet titleId="join-sheet-title" onClose={onClose} busy={joining}>
       <h2 id="join-sheet-title">Join a derby</h2>
-      <p className="sheet__intro">Enter the invite code from the derby organizer.</p>
-      <form className="field-form" onSubmit={submit}>
-        <label><span>Invite code</span><input className="code-input" value={code} onChange={(event) => setCode(event.target.value.toUpperCase().replace(/\s/g, ''))} placeholder="Paste your invite code" autoCapitalize="characters" autoComplete="off" spellCheck={false} required /></label>
+      <p className="sheet__intro">Scan a participant’s QR code or enter their invite code.</p>
+      {scanning ? <InviteScanner onCancel={() => setScanning(false)} onCode={value => { setCode(value); setScanned(true); setScanning(false); setError(''); }} /> : <form className="field-form" onSubmit={submit}>
+        <button type="button" className="button button--paper button--full" disabled={joining} onClick={() => { setError(''); setScanning(true); }}><ScanLine size={20} /> Scan QR code</button>
+        <label><span>Invite code</span><input className="code-input" value={code} onChange={(event) => { setCode(event.target.value.toUpperCase().replace(/\s/g, '')); setScanned(false); }} placeholder="Paste your invite code" autoCapitalize="characters" autoComplete="off" spellCheck={false} maxLength={32} disabled={joining} required /></label>
+        {scanned && <p role="status">Invite ready. Tap Join derby to confirm.</p>}
         {error && <p className="form-error" role="alert">{error}</p>}
-        <button className="button button--primary button--full button--large" type="submit" disabled={joining}>{joining ? 'Joining derby…' : 'Join derby'}</button>
-      </form>
+        <button ref={joinButton} className="button button--primary button--full button--large" type="submit" disabled={joining}>{joining ? 'Joining derby…' : 'Join derby'}</button>
+      </form>}
     </Sheet>
   );
 }

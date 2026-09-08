@@ -2,7 +2,7 @@ import { hasCatchLocation } from '../domain/catchMap';
 
 type CatchLocation = { lat: number; lon: number; error?: never } | { lat?: undefined; lon?: undefined; error: string };
 
-// One-shot, opt-in fix only. The independent deadline also covers browsers
+// One-shot fix only, never continuous tracking. The deadline also covers browsers
 // that leave a permission prompt pending instead of invoking an error callback.
 export function getCatchLocation(timeout = 5000): Promise<CatchLocation> {
   return new Promise(resolve => {

@@ -40,7 +40,7 @@ for (const width of [320, 375, 1280]) test(`water selection is opt-in, editable 
   await page.getByLabel('Water', { exact: true }).fill('Mirror Lake — south end');
   await expect(mirror).toHaveAttribute('aria-pressed', 'false');
   for (const button of [mirror, page.getByRole('button', { name: 'Use my location', exact: true })]) {
-    const box = await button.boundingBox(); expect(box!.height).toBeGreaterThanOrEqual(44); expect(box!.width).toBeGreaterThanOrEqual(44);
+    const box = await button.boundingBox(); expect(box!.height + 0.01).toBeGreaterThanOrEqual(44); expect(box!.width + 0.01).toBeGreaterThanOrEqual(44);
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: `/tmp/dink-derby-water-${width}.png`, fullPage: true });

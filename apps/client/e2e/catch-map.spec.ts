@@ -69,7 +69,8 @@ for (const width of [320, 375, 1280]) {
     await page.getByRole('button', { name: 'Fit all catches', exact: true }).click();
     for (const button of [page.getByRole('button', { name: 'Map', exact: true }), page.getByRole('button', { name: 'My catches', exact: true }), page.getByRole('button', { name: 'Fit all catches', exact: true }), page.getByRole('button', { name: 'Zoom in', exact: true })]) {
       const box = await button.boundingBox();
-      expect(box!.height).toBeGreaterThanOrEqual(44); expect(box!.width).toBeGreaterThanOrEqual(44);
+      // Chromium can report 43.9999993 for a 44px target after device scaling.
+      expect(box!.height + 0.01).toBeGreaterThanOrEqual(44); expect(box!.width + 0.01).toBeGreaterThanOrEqual(44);
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: `/tmp/dink-derby-map-${width}.png`, fullPage: true });

@@ -133,6 +133,7 @@ function toDerbyParticipant(record: DbDerbyParticipant): DerbyParticipant {
     userId: record.userId,
     nickname: record.nickname ?? undefined,
     isAdmin: record.isAdmin,
+    removedAt: record.removedAt?.toISOString(),
     createdAt: record.createdAt.toISOString(),
   };
 }
@@ -241,7 +242,8 @@ export async function processSync(
   }
 
   const memberships = await db.select().from(derbyParticipants).where(eq(derbyParticipants.userId, userId));
-  const visibleDerbyIds = memberships.map((membership) => membership.derbyId);
+  const removedDerbyIds = memberships.filter(membership => membership.removedAt).map(membership => membership.derbyId);
+  const visibleDerbyIds = memberships.filter(membership => !membership.removedAt).map((membership) => membership.derbyId);
   if (requestedDerbyId && !visibleDerbyIds.includes(requestedDerbyId)) {
     throw Object.assign(new Error('You have not joined that derby.'), { statusCode: 403 });
   }
@@ -257,6 +259,7 @@ export async function processSync(
       rejected,
       events: [],
       nextCursor: cursor,
+      removedDerbyIds,
       patches: {
         users: patchUsers.map(toUser), derbies: [], derbyParticipants: [], catches: [], chatMessages: [], reactions: [], media: [],
       },
@@ -293,6 +296,7 @@ export async function processSync(
     rejected,
     events,
     nextCursor,
+    removedDerbyIds,
     patches: {
       users: patchUsers.map(toUser),
       derbies: patchDerbies.map(toDerby),
@@ -368,8 +372,9 @@ async function applyOperation(database: typeof db, item: SyncOutboxItem) {
     return;
   }
   if (item.entityType === 'derbyParticipant') {
-    if (item.operation === 'delete') await database.delete(derbyParticipants).where(eq(derbyParticipants.id, item.entityId));
-    else await database.insert(derbyParticipants).values(data as NewDerbyParticipant).onConflictDoUpdate({ target: derbyParticipants.id, set: data });
+    // Only creator bootstrap reaches this path. Existing rows, including removal
+    // tombstones, must never be overwritten by an old client's outbox.
+    await database.insert(derbyParticipants).values({ ...data, isAdmin: true, removedAt: null } as NewDerbyParticipant).onConflictDoNothing();
     return;
   }
   if (item.entityType === 'catch') {
@@ -429,7 +434,9 @@ async function assertCanWrite(database: typeof db, userId: string, clientId: str
     }
     return;
   }
-  if (item.entityType === 'derbyParticipant' && item.operation === 'create') {
+  if (item.entityType === 'derbyParticipant') {
+    if (item.operation !== 'create') throw new Error('Use the creator-only Remove angler action to change membership.');
+    if (item.derbyId !== payload.derbyId || payload.removedAt) throw new Error('Invalid membership operation.');
     if (payload.userId !== userId) throw new Error('A user can only add their own derby membership.');
     const [derby] = await database.select().from(derbies).where(eq(derbies.id, String(payload.derbyId))).limit(1);
     if (!derby || derby.createdByUserId !== userId) throw new Error('Use an invite code to join this derby.');
@@ -438,9 +445,10 @@ async function assertCanWrite(database: typeof db, userId: string, clientId: str
 
   const derbyId = item.derbyId || (typeof payload.derbyId === 'string' ? payload.derbyId : undefined);
   if (!derbyId) throw new Error('This change is missing its derby.');
+  if (payload.derbyId !== derbyId) throw new Error('The activity belongs to a different derby.');
   const [membership] = await database.select().from(derbyParticipants)
-    .where(and(eq(derbyParticipants.derbyId, derbyId), eq(derbyParticipants.userId, userId))).limit(1);
-  if (!membership) throw new Error('You have not joined this derby.');
+    .where(and(eq(derbyParticipants.derbyId, derbyId), eq(derbyParticipants.userId, userId))).limit(1).for('share');
+  if (!membership || membership.removedAt) throw new Error('You no longer have access to this derby.');
 
   if (['catch', 'chatMessage', 'reaction'].includes(item.entityType) && payload.userId !== userId) {
     throw new Error('A user can only write their own field activity.');
@@ -474,13 +482,16 @@ async function assertCanWrite(database: typeof db, userId: string, clientId: str
   if (item.entityType === 'chatMessage') {
     const [existing] = await database.select().from(chatMessages).where(eq(chatMessages.id, item.entityId)).limit(1);
     if (existing && existing.userId !== userId) throw new Error('A user cannot change another angler’s message.');
+    if (existing && existing.derbyId !== derbyId) throw new Error('A message cannot move to another derby.');
   }
   if (item.entityType === 'reaction') {
     const [existing] = await database.select().from(reactions).where(eq(reactions.id, item.entityId)).limit(1);
     if (existing && existing.userId !== userId) throw new Error('A user cannot change another angler’s reaction.');
+    if (existing && existing.derbyId !== derbyId) throw new Error('A reaction cannot move to another derby.');
   }
   if (item.entityType === 'media') {
     const [existing] = await database.select().from(media).where(eq(media.id, item.entityId)).limit(1);
     if (existing && existing.ownerId !== userId) throw new Error('A user cannot change another angler’s photo.');
+    if (existing && existing.derbyId !== derbyId) throw new Error('A photo cannot move to another derby.');
   }
 }

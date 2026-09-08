@@ -2,6 +2,7 @@ import type { SyncOutboxItem, SyncRequest, SyncResponse } from '@dink-derby/shar
 import { db } from '../db';
 import { getOrCreateDeviceId } from '../utils/device';
 import { apiFetch, uploadMedia } from '../lib/api';
+import { applyDerbyRemovals, applyMembershipPatches } from '../data/derbyAccess';
 
 export type SyncPhase = 'idle' | 'syncing' | 'offline' | 'error';
 
@@ -148,9 +149,10 @@ export class SyncService {
   private async uploadPendingMedia() {
     // Enumerate keys first so a backlog never retains every photo at once.
     const ids = await db.media.toCollection().primaryKeys();
+    const removed = new Set((await db.settings.get('app'))?.removedDerbyIds ?? []);
     for (const id of ids) {
       const media = await db.media.get(id);
-      if (!media || (!media.bytes && !media.blob) || media.remoteUrl) continue;
+      if (!media || removed.has(media.derbyId) || (!media.bytes && !media.blob) || media.remoteUrl) continue;
       const blob = media.bytes ? new Blob([media.bytes], { type: media.contentType }) : media.blob!;
       const path = await uploadMedia(media.id, media.contentType, blob);
       if (path) await db.media.update(media.id, { remoteUrl: path, isPendingSync: false });
@@ -207,8 +209,9 @@ export class SyncService {
 
       await db.transaction(
         'rw',
-        [db.users, db.derbies, db.derbyParticipants, db.catches, db.chatMessages, db.reactions, db.media, db.syncOutbox, db.syncState, db.derbyEvents],
+        [db.users, db.derbies, db.derbyParticipants, db.catches, db.chatMessages, db.reactions, db.media, db.syncOutbox, db.syncState, db.derbyEvents, db.settings],
         async () => {
+          await applyDerbyRemovals(data.removedDerbyIds);
           await this.markAcknowledged(outbox, data.appliedOperationIds);
           await Promise.all(data.rejected.map((rejection) => db.syncOutbox.update(rejection.operationId, {
             status: 'failed',
@@ -219,7 +222,7 @@ export class SyncService {
           const pendingDerbies = new Set(pending.filter(op => op.entityType === 'derby').map(op => op.entityId));
           const settledDerbies = patches.derbies.filter(derby => !pendingDerbies.has(derby.id));
           if (settledDerbies.length) await db.derbies.bulkPut(settledDerbies);
-          if (patches.derbyParticipants.length) await db.derbyParticipants.bulkPut(patches.derbyParticipants);
+          await applyMembershipPatches(patches.derbyParticipants);
           const pendingCatches = new Set(pending.filter(op => op.entityType === 'catch').map(op => op.entityId));
           const settledCatches = patches.catches.filter(item => !pendingCatches.has(item.id));
           if (settledCatches.length) await db.catches.bulkPut(settledCatches);

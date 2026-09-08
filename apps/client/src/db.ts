@@ -47,6 +47,7 @@ export type AppSettings = {
   initializedAt?: string;
   seededAt?: string;
   authMode?: 'supabase' | 'local';
+  removedDerbyIds?: string[];
 };
 
 export type DerbySyncState = {

@@ -153,4 +153,49 @@ integration('Postgres sync integration', () => {
     const reopen = { ...finishOp, id: 'reopen-denied', payload: derby };
     expect((await processSync(deviceA.id, userA.id, [reopen])).rejected).toHaveLength(1);
   });
+  it('enforces creator-only removal, preserves history, and blocks every removed-member write/read path', async () => {
+    const url = `/derbies/${derby.id}/anglers/${userB.id}/remove`;
+    const { eq } = await import('drizzle-orm');
+    const [guest] = await database.select().from(schema.derbyParticipants).where(eq(schema.derbyParticipants.userId, userB.id));
+    expect((await server.inject({ method: 'POST', url })).statusCode).toBe(401);
+    expect((await server.inject({ method: 'POST', url, headers: { 'x-dink-user-id': userB.id } })).statusCode).toBe(403);
+    expect((await server.inject({ method: 'POST', url, headers: { 'x-dink-user-id': 'integration-outsider' } })).statusCode).toBe(403);
+    expect((await server.inject({ method: 'POST', url: `/derbies/${derby.id}/anglers/${userA.id}/remove`, headers: { 'x-dink-user-id': userA.id } })).statusCode).toBe(409);
+    expect((await server.inject({ method: 'POST', url: '/derbies/not-the-derby/anglers/integration-user-b/remove', headers: { 'x-dink-user-id': userA.id } })).statusCode).toBe(403);
+    // Neither a forged isAdmin flag nor the old generic membership update/delete
+    // routes grant removal or reinstatement authority.
+    for (const operationType of ['update', 'delete'] as const) {
+      const result = await processSync(deviceB.id, userB.id, [{ ...operation('derbyParticipant', membership, derby.id), id: `forged-member-${operationType}`, operation: operationType }]);
+      expect(result.rejected).toHaveLength(1);
+    }
+    await database.update(schema.derbyParticipants).set({ isAdmin: true }).where(eq(schema.derbyParticipants.id, guest.id));
+    expect((await server.inject({ method: 'POST', url, headers: { 'x-dink-user-id': userB.id } })).statusCode).toBe(403);
+
+    await database.insert(schema.media).values({ id: 'removal-photo', derbyId: derby.id, ownerId: userB.id, contentHash: 'a'.repeat(64), contentType: 'image/jpeg', sizeBytes: 20, clientId: deviceB.id, remoteUrl: `${derby.id}/removal-photo.jpg` });
+    const response = await server.inject({ method: 'POST', url, headers: { 'x-dink-user-id': userA.id } });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().participant).toMatchObject({ userId: userB.id, derbyId: derby.id, removedAt: expect.any(String) });
+    const repeated = await server.inject({ method: 'POST', url, headers: { 'x-dink-user-id': userA.id } });
+    expect(repeated.json()).toEqual(response.json());
+    const ownerSnapshot = await processSync(deviceA.id, userA.id, []);
+    expect(ownerSnapshot.patches.catches.some(item => item.userId === userB.id && !item.deletedAt)).toBe(true);
+    expect(ownerSnapshot.patches.derbyParticipants.find(person => person.userId === userB.id)?.removedAt).toBeDefined();
+    expect(ownerSnapshot.events.filter(event => event.type === 'derbyParticipant.removed')).toHaveLength(1);
+    const removedSnapshot = await processSync(deviceB.id, userB.id, []);
+    expect(removedSnapshot.removedDerbyIds).toEqual([derby.id]);
+    for (const field of ['derbies', 'derbyParticipants', 'catches', 'chatMessages', 'reactions', 'media'] as const) expect(removedSnapshot.patches[field]).toEqual([]);
+    expect(removedSnapshot.events).toEqual([]);
+    await expect(processSync(deviceB.id, userB.id, [], undefined, 0, derby.id)).rejects.toMatchObject({ statusCode: 403 });
+    const rejoin = await server.inject({ method: 'POST', url: '/join', payload: { inviteCode: derby.inviteCode, user: userB, device: deviceB } });
+    expect(rejoin.statusCode).toBe(403); expect(rejoin.json().message).toContain('cannot rejoin');
+    for (const entityType of ['catch', 'chatMessage', 'reaction', 'media', 'derbyParticipant'] as const) {
+      const result = await processSync(deviceB.id, userB.id, [{ ...operation(entityType, { id: `blocked-${entityType}` }, derby.id), payload: { id: `blocked-${entityType}`, derbyId: derby.id, userId: userB.id, ownerId: userB.id } }]);
+      expect(result.rejected).toHaveLength(1);
+    }
+    for (const request of [
+      { method: 'POST' as const, url: '/media/upload-url', payload: { mediaId: 'removal-photo', contentType: 'image/jpeg' } },
+      { method: 'POST' as const, url: '/media/removal-photo/complete', payload: { path: `${derby.id}/removal-photo.jpg` } },
+      { method: 'GET' as const, url: '/media/removal-photo/download-url' },
+    ]) expect((await server.inject({ ...request, headers: { 'x-dink-user-id': userB.id } })).statusCode).toBe(403);
+  });
 });

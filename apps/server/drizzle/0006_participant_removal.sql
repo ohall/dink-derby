@@ -1,0 +1,1 @@
+ALTER TABLE "derby_participants" ADD COLUMN "removed_at" timestamp;

@@ -43,6 +43,13 @@
       "when": 1788018417102,
       "tag": "0005_flippant_infant_terrible",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788894392847,
+      "tag": "0006_participant_removal",
+      "breakpoints": true
     }
   ]
 }

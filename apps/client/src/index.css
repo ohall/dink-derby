@@ -359,6 +359,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .profile-crest { display: none; }
 .finish-preview { padding: 16px; background: #e7eddf; border-radius: 12px; line-height: 1.5; }
 .invite-code { text-align: center; font-weight: 750; }
+.angler-roster-button { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 12px; border: 1px solid #f3e5c566; border-radius: 9px; background: #ffffff12; color: var(--cream); font: inherit; font-weight: 700; cursor: pointer; }
+.angler-list { list-style: none; padding: 0; margin: 20px 0; }
+.angler-list li { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.angler-list li > div { min-width: 0; display: grid; gap: 4px; overflow-wrap: anywhere; }
+.angler-list small { color: var(--muted); }
 .invite-qr { display: grid; justify-items: center; gap: 12px; margin-bottom: 20px; text-align: center; }
 .invite-qr strong { overflow-wrap: anywhere; }
 .invite-qr svg { display: block; width: min(256px, 100%); height: auto; background: #fff; border-radius: 8px; }

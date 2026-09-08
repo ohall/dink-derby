@@ -39,6 +39,7 @@ export const DerbyParticipantSchema = z.object({
   userId: z.string(),
   nickname: z.string().optional(),
   isAdmin: z.boolean(),
+  removedAt: z.string().datetime().optional(),
   createdAt: z.string(),
 });
 
@@ -179,6 +180,7 @@ export type SyncRequest = z.infer<typeof SyncRequestSchema>;
 
 export const SyncResponseSchema = z.object({
   serverTime: z.string(),
+  removedDerbyIds: z.array(z.string()).optional(),
   appliedOperationIds: z.array(z.string()),
   rejected: z.array(z.object({
     operationId: z.string(),
@@ -227,6 +229,9 @@ export const JoinDerbyResponseSchema = z.object({
 });
 
 export type JoinDerbyResponse = z.infer<typeof JoinDerbyResponseSchema>;
+
+export const RemoveAnglerParamsSchema = z.object({ derbyId: z.string().min(1).max(200), userId: z.string().min(1).max(200) });
+export const RemoveAnglerResponseSchema = z.object({ participant: DerbyParticipantSchema });
 
 export const MediaUploadRequestSchema = z.object({
   mediaId: z.string(),

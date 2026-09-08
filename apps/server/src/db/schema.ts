@@ -33,6 +33,7 @@ export const derbyParticipants = pgTable('derby_participants', {
   userId: text('user_id').notNull().references(() => users.id),
   nickname: text('nickname'),
   isAdmin: boolean('is_admin').default(false).notNull(),
+  removedAt: timestamp('removed_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
   derbyUserIndex: uniqueIndex('derby_participants_derby_user_idx').on(table.derbyId, table.userId),

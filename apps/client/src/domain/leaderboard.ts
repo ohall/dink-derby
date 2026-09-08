@@ -41,7 +41,7 @@ export function buildLeaderboard(
   const active = catches.filter((item) => item.derbyId === derby.id && catchWithinDerby(derby, item));
 
   return participants
-    .filter((participant) => participant.derbyId === derby.id)
+    .filter((participant) => participant.derbyId === derby.id && !participant.removedAt)
     .map((participant) => {
       const participantCatches = active.filter((item) => item.userId === participant.userId);
       const bestCatch = [...participantCatches].sort(
@@ -68,10 +68,10 @@ export function findBiggestFish(
   users: User[],
 ): BiggestFish | undefined {
   if (derby.scoringMode === 'count') return undefined;
-  const participantByUserId = new Map(participants.map((participant) => [participant.userId, participant]));
+  const participantByUserId = new Map(participants.filter(participant => participant.derbyId === derby.id && !participant.removedAt).map((participant) => [participant.userId, participant]));
   const userById = new Map(users.map((user) => [user.id, user]));
   const item = catches
-    .filter((candidate) => candidate.derbyId === derby.id && catchWithinDerby(derby, candidate) && catchScore(derby, candidate) > 0)
+    .filter((candidate) => candidate.derbyId === derby.id && participantByUserId.has(candidate.userId) && catchWithinDerby(derby, candidate) && catchScore(derby, candidate) > 0)
     .sort((a, b) => catchScore(derby, b) - catchScore(derby, a))[0];
   if (!item) return undefined;
   return {

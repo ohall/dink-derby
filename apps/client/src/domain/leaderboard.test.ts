@@ -43,6 +43,13 @@ const fish = (id: string, userId: string, lengthInInches: number, pending = fals
 });
 
 describe('buildLeaderboard', () => {
+  it('excludes removed anglers from scores and biggest fish without deleting their catches', () => {
+    const roster = participants.map(person => person.userId === 'two' ? { ...person, removedAt: now } : person);
+    const catches = [fish('a', 'one', 12), fish('b', 'two', 20)];
+    expect(buildLeaderboard(derby('total'), catches, roster, users).map(row => row.userId)).toEqual(['one']);
+    expect(findBiggestFish(derby('total'), catches, roster, users)?.item.id).toBe('a');
+    expect(catches).toHaveLength(2);
+  });
   it('uses the single biggest catch when configured', () => {
     const rows = buildLeaderboard(
       derby('biggest'),

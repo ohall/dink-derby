@@ -15,6 +15,7 @@ import { syncService } from '../sync';
 import { joinDerbyRequest } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { isDerbyComplete } from '../domain/derbyLifecycle';
+import { applyMembershipPatches, assertDerbyAccess } from './derbyAccess';
 
 type CreateDerbyInput = {
   name: string;
@@ -76,6 +77,7 @@ export async function joinDerby(inviteCode: string) {
   const device = await db.device.get(deviceId);
   if (!device) throw new Error('This phone is missing its field identity.');
   const result = await joinDerbyRequest({ inviteCode: inviteCode.trim().toUpperCase(), user, device });
+  await assertDerbyAccess(result.derby.id);
   const snapshot = result.snapshot;
   await db.transaction(
     'rw',
@@ -83,7 +85,7 @@ export async function joinDerby(inviteCode: string) {
     async () => {
       if (snapshot.users.length) await db.users.bulkPut(snapshot.users);
       if (snapshot.derbies.length) await db.derbies.bulkPut(snapshot.derbies);
-      if (snapshot.derbyParticipants.length) await db.derbyParticipants.bulkPut(snapshot.derbyParticipants);
+      await applyMembershipPatches(snapshot.derbyParticipants);
       if (snapshot.catches.length) await db.catches.bulkPut(snapshot.catches);
       if (snapshot.chatMessages.length) await db.chatMessages.bulkPut(snapshot.chatMessages);
       if (snapshot.reactions.length) await db.reactions.bulkPut(snapshot.reactions);
@@ -138,6 +140,7 @@ export async function createDerby(input: CreateDerbyInput) {
 }
 
 export async function finishDerby(derbyId: string) {
+  await assertDerbyAccess(derbyId);
   const { user } = await currentIdentity();
   await db.transaction('rw', [db.derbies, db.derbyParticipants, db.syncOutbox], async () => {
     const derby = await db.derbies.get(derbyId);
@@ -158,6 +161,7 @@ export async function finishDerby(derbyId: string) {
 }
 
 export async function saveCatch(input: SaveCatchInput) {
+  await assertDerbyAccess(input.derby.id);
   const { user, deviceId } = await currentIdentity();
   if (input.derby.scoringMode !== 'count' && (!input.measurement || !Number.isFinite(input.measurement) || input.measurement <= 0)) {
     throw new Error(`Enter a valid ${input.derby.scoringMode}.`);
@@ -235,6 +239,7 @@ export async function saveCatch(input: SaveCatchInput) {
 }
 
 export async function sendMessage(derbyId: string, text: string) {
+  await assertDerbyAccess(derbyId);
   const { user, deviceId } = await currentIdentity();
   const now = new Date().toISOString();
   const message: ChatMessage = {
@@ -260,9 +265,10 @@ export type CatchCorrection = { measurement?: number; species?: string; note?: s
 
 async function changeCatch(catchId: string, correction: CatchCorrection | { removed: boolean }) {
   const { user } = await currentIdentity();
-  await db.transaction('rw', [db.catches, db.derbies, db.syncOutbox], async () => {
+  await db.transaction('rw', [db.catches, db.derbies, db.syncOutbox, db.settings], async () => {
     const current = await db.catches.get(catchId);
     if (!current || current.userId !== user.id) throw new Error('You can only change your own catches.');
+    await assertDerbyAccess(current.derbyId);
     const derby = await db.derbies.get(current.derbyId);
     if (!derby || isDerbyComplete(derby) || derby.status === 'cancelled') throw new Error('This derby is closed. Its catches cannot be changed.');
     const now = new Date().toISOString();
@@ -298,6 +304,7 @@ export async function toggleReaction(
   targetId: string,
   reactionKind: Reaction['reaction'],
 ) {
+  await assertDerbyAccess(derbyId);
   const { user, deviceId } = await currentIdentity();
   const existing = await db.reactions
     .where('targetId')

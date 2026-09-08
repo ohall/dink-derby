@@ -33,6 +33,7 @@ import { EditCatchSheet } from './EditCatchSheet';
 import type { DerbySection } from '../domain/navigation';
 import { DerbyMap } from './DerbyMap';
 import { InviteQr } from './InviteQr';
+import { AnglersSheet } from './AnglersSheet';
 
 type DerbyScreenProps = {
   derby: Derby;
@@ -145,6 +146,7 @@ export function DerbyScreen({ derby, tab, onTabChange: setTab, currentUser, onBa
   const [catchNotice, setCatchNotice] = useState('');
   const [restoringId, setRestoringId] = useState<string>();
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [anglersOpen, setAnglersOpen] = useState(false);
   const [copyError, setCopyError] = useState('');
   const [sending, setSending] = useState(false);
   const [messageError, setMessageError] = useState('');
@@ -156,6 +158,8 @@ export function DerbyScreen({ derby, tab, onTabChange: setTab, currentUser, onBa
   const sync = useSyncStatus();
   const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
   const participants = useLiveQuery(() => db.derbyParticipants.where('derbyId').equals(derby.id).toArray(), [derby.id]) ?? [];
+  const activeParticipants = participants.filter(person => !person.removedAt);
+  const removedAnglerIds = new Set(participants.filter(person => person.removedAt).map(person => person.userId));
   const catches = useLiveQuery(() => db.catches.where('derbyId').equals(derby.id).reverse().sortBy('caughtAt'), [derby.id]) ?? [];
   const messages = useLiveQuery(() => db.chatMessages.where('derbyId').equals(derby.id).reverse().sortBy('sentAt'), [derby.id]) ?? [];
   const reactions = useLiveQuery(() => db.reactions.where('derbyId').equals(derby.id).toArray(), [derby.id]) ?? [];
@@ -163,7 +167,7 @@ export function DerbyScreen({ derby, tab, onTabChange: setTab, currentUser, onBa
   const userById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
   const leaderboard = useMemo(() => buildLeaderboard(derby, catches, participants, users), [derby, catches, participants, users]);
   const biggestFish = useMemo(() => findBiggestFish(derby, catches, participants, users), [derby, catches, participants, users]);
-  const scoredCatches = catches.filter(item => catchWithinDerby(derby, item));
+  const scoredCatches = catches.filter(item => !removedAnglerIds.has(item.userId) && catchWithinDerby(derby, item));
   const winners = leaderboard.filter(row => row.score > 0 && row.score === leaderboard[0]?.score && row.catchCount === leaderboard[0]?.catchCount);
   const completionPending = useLiveQuery(() => db.syncOutbox.where('derbyId').equals(derby.id).filter(op => op.entityType === 'derby').count(), [derby.id]);
 
@@ -244,7 +248,7 @@ export function DerbyScreen({ derby, tab, onTabChange: setTab, currentUser, onBa
           <p className="derby-location"><MapPin size={17} /> {derby.bodyOfWaterName}</p>
           <div className="derby-banner__facts">
             {(complete || derby.endsAt) && <span><Clock3 size={18} /><b>{complete ? `Ended ${new Date(derby.endsAt || derby.updatedAt).toLocaleString()}` : formatRemaining(derby.endsAt)}</b></span>}
-            <span><Users size={18} /><b>{participants.length} angler{participants.length === 1 ? '' : 's'}</b></span>
+            <button className="angler-roster-button" type="button" onClick={() => setAnglersOpen(true)}><Users size={18} />{currentUser?.id === derby.createdByUserId ? 'Manage anglers' : 'View anglers'} ({activeParticipants.length})</button>
             <span><Fish size={18} /><b>{scoredCatches.length} catch{scoredCatches.length === 1 ? '' : 'es'}</b></span>
           </div>
         </div>
@@ -265,7 +269,7 @@ export function DerbyScreen({ derby, tab, onTabChange: setTab, currentUser, onBa
       {complete && <section className="completion-summary" aria-label="Derby results summary">
         <p className="eyebrow">{winners.length > 1 ? 'JOINT WINNERS' : 'WINNER'}</p>
         <h2>{winners.length ? winners.map(row => row.displayName).join(' & ') : 'No scoring catches'}</h2>
-        <p>{scoredCatches.length} catch{scoredCatches.length === 1 ? '' : 'es'} · {participants.length} angler{participants.length === 1 ? '' : 's'} · {scoringRuleLabel(derby)}</p>
+        <p>{scoredCatches.length} catch{scoredCatches.length === 1 ? '' : 'es'} · {activeParticipants.length} angler{activeParticipants.length === 1 ? '' : 's'} · {scoringRuleLabel(derby)}</p>
         {!!completionPending && <p role="status">Completion saved on this device — waiting for server confirmation.</p>}
         <p className="completion-note">Catch entry is closed. Catches recorded before the end time may still arrive from offline phones and update these results.</p>
       </section>}
@@ -319,7 +323,7 @@ export function DerbyScreen({ derby, tab, onTabChange: setTab, currentUser, onBa
                     </div>
                     <footer>
                       <ReactionBar derbyId={derby.id} targetType="catch" targetId={item.id} reactions={reactions} currentUserId={currentUser?.id} />
-                      <span>{!catchWithinDerby(derby, item) ? 'Outside derby cutoff · not scored' : item.isPendingSync ? 'Provisional score' : 'Counts in standings'}</span>
+                      <span>{removedAnglerIds.has(item.userId) ? 'Angler removed · not scored' : !catchWithinDerby(derby, item) ? 'Outside derby cutoff · not scored' : item.isPendingSync ? 'Provisional score' : 'Counts in standings'}</span>
                     </footer>
                   </article>
                 );
@@ -394,6 +398,7 @@ export function DerbyScreen({ derby, tab, onTabChange: setTab, currentUser, onBa
       {editingCatch && <EditCatchSheet key={editingCatch.id} item={editingCatch} derby={derby} onClose={() => setEditingCatch(undefined)} onSaved={removed => {
         setEditingCatch(undefined); setCatchNotice(removed ? 'Catch removed. You can restore it under Removed catches while the derby is active.' : 'Catch updated. Standings updated on this device.');
       }} />}
+      {anglersOpen && <AnglersSheet derby={derby} participants={participants} users={users} userId={currentUser?.id} onClose={() => setAnglersOpen(false)} />}
       {inviteOpen && <Sheet titleId="invite-title" onClose={() => setInviteOpen(false)}>
         <h2 id="invite-title">Invite anglers</h2>
         <p className="sheet__intro">Show this QR code to another angler, or share the invite code below.</p>
@@ -407,7 +412,7 @@ export function DerbyScreen({ derby, tab, onTabChange: setTab, currentUser, onBa
       {confirmFinish && <Sheet titleId="finish-title" onClose={() => setConfirmFinish(false)} busy={finishing}>
           <h2 id="finish-title">Finish this derby?</h2>
           <p>Close catch entry for {derby.name} and move it to Past derbies. This cannot be undone here.</p>
-          <p>{scoredCatches.length} catch{scoredCatches.length === 1 ? '' : 'es'} · {participants.length} angler{participants.length === 1 ? '' : 's'}</p>
+          <p>{scoredCatches.length} catch{scoredCatches.length === 1 ? '' : 'es'} · {activeParticipants.length} angler{activeParticipants.length === 1 ? '' : 's'}</p>
           <div className="finish-preview"><strong>{winners.length ? `Current leader: ${winners.map(row => row.displayName).join(' & ')}` : 'No scoring catches yet'}</strong><p>{scoringRuleLabel(derby)}{leaderboard[0] ? ` · ${formatScore(derby, leaderboard[0].score)} ${scoringLabel(derby)}` : ''}</p>{biggestFish && <p>Biggest fish: {formatScore(derby, biggestFish.score)} {scoringLabel(derby)} · {biggestFish.displayName}</p>}</div>
           <p>Ask everyone to sync first. Catches already recorded on offline phones can arrive later and change the results.</p>
           {!!sync.pendingCount && <p role="status">This device has {sync.pendingCount} changes waiting to sync. Completion will also be queued.</p>}

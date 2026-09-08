@@ -14,6 +14,8 @@ import {
   SyncResponseSchema,
   NearbyWatersRequestSchema,
   NearbyWatersResponseSchema,
+  RemoveAnglerParamsSchema,
+  RemoveAnglerResponseSchema,
 } from '@dink-derby/shared-types';
 import { and, eq } from 'drizzle-orm';
 
@@ -24,6 +26,7 @@ import { authenticate, httpError } from './auth';
 import { createMediaDownload, createMediaUpload, mediaBucket } from './storage';
 import { identifyCatch, isIdentifyConfigured } from './identify';
 import { lookupNearbyWaters } from './nearbyWaters';
+import { removeAngler, requireActiveMembership } from './membership';
 
 type SyncProcessor = typeof processSync;
 
@@ -105,6 +108,7 @@ export const buildServer = (syncProcessor: SyncProcessor = processSync, waterLoo
         rejected: result.rejected,
         events: result.events,
         nextCursor: result.nextCursor,
+        removedDerbyIds: result.removedDerbyIds,
         patches: result.patches,
       });
     }
@@ -153,6 +157,7 @@ export const buildServer = (syncProcessor: SyncProcessor = processSync, waterLoo
     const [participant] = await db.select().from(derbyParticipants)
       .where(and(eq(derbyParticipants.derbyId, derby.id), eq(derbyParticipants.userId, actorId))).limit(1);
     if (!participant) throw httpError(500, 'The derby membership could not be created.');
+    if (participant.removedAt) throw httpError(403, 'The creator removed you from this derby. This profile cannot rejoin.');
     const snapshot = await getDerbySnapshot(derby.id);
     const joinedDerby = snapshot.derbies[0];
     if (!joinedDerby) throw httpError(404, 'That derby is no longer available.');
@@ -170,11 +175,19 @@ export const buildServer = (syncProcessor: SyncProcessor = processSync, waterLoo
     });
   });
 
+  app.post('/derbies/:derbyId/anglers/:userId/remove', async (request, reply) => {
+    const actorId = await authenticate(request);
+    const { derbyId, userId } = RemoveAnglerParamsSchema.parse(request.params);
+    reply.header('Cache-Control', 'private, no-store');
+    return RemoveAnglerResponseSchema.parse(await removeAngler(derbyId, userId, actorId));
+  });
+
   app.post('/media/upload-url', async (request) => {
     const body = MediaUploadRequestSchema.parse(request.body);
     const actorId = await authenticate(request);
     const [record] = await db.select().from(media).where(eq(media.id, body.mediaId)).limit(1);
     if (!record || record.ownerId !== actorId) throw httpError(404, 'That catch photo is not available.');
+    await requireActiveMembership(record.derbyId, actorId);
     const allowedContentTypes = ['image/jpeg', 'image/png', 'image/webp'];
     if (!allowedContentTypes.includes(body.contentType)) throw httpError(415, 'Only JPEG, PNG, or WebP photos are allowed.');
     const extension = body.contentType === 'image/png' ? 'png' : body.contentType === 'image/webp' ? 'webp' : 'jpg';
@@ -189,6 +202,7 @@ export const buildServer = (syncProcessor: SyncProcessor = processSync, waterLoo
     const actorId = await authenticate(request);
     const [record] = await db.select().from(media).where(eq(media.id, params.id)).limit(1);
     if (!record || record.ownerId !== actorId) throw httpError(404, 'That catch photo is not available.');
+    await requireActiveMembership(record.derbyId, actorId);
     if (!body.path.startsWith(`${record.derbyId}/${record.id}.`)) throw httpError(400, 'The uploaded photo path is invalid.');
     await db.update(media).set({ remoteUrl: body.path, updatedAt: new Date() }).where(eq(media.id, record.id));
     return { ok: true as const };
@@ -199,9 +213,7 @@ export const buildServer = (syncProcessor: SyncProcessor = processSync, waterLoo
     const actorId = await authenticate(request);
     const [record] = await db.select().from(media).where(eq(media.id, params.id)).limit(1);
     if (!record?.remoteUrl) throw httpError(404, 'That catch photo has not finished uploading.');
-    const [membership] = await db.select().from(derbyParticipants)
-      .where(and(eq(derbyParticipants.derbyId, record.derbyId), eq(derbyParticipants.userId, actorId))).limit(1);
-    if (!membership) throw httpError(403, 'Join this derby to view its catch photos.');
+    await requireActiveMembership(record.derbyId, actorId);
     return MediaDownloadResponseSchema.parse({ signedUrl: await createMediaDownload(record.remoteUrl) });
   });
 
@@ -213,6 +225,7 @@ export const buildServer = (syncProcessor: SyncProcessor = processSync, waterLoo
     const [catchRecord] = await db.select().from(catches).where(eq(catches.id, params.id)).limit(1);
     if (!catchRecord) throw httpError(404, 'That catch is not available.');
     if (catchRecord.userId !== actorId) throw httpError(403, 'Only the angler who logged this catch can identify it.');
+    await requireActiveMembership(catchRecord.derbyId, actorId);
     if (!catchRecord.photoUrl) throw httpError(409, 'Upload a catch photo before running identification.');
 
     const result = await identifyCatch(catchRecord.photoUrl);

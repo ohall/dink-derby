@@ -7,17 +7,7 @@ import { scoringRuleLabel } from '../domain/leaderboard';
 import { preparePhoto } from '../utils/photo';
 import { useCatchDraft } from './useCatchDraft';
 import { Sheet } from './Sheet';
-
-async function browserGeo() {
-  if (!navigator.geolocation) return { lat: undefined, lon: undefined };
-  return new Promise<{ lat?: number; lon?: number }>((resolve) => {
-    navigator.geolocation.getCurrentPosition(
-      (position) => resolve({ lat: position.coords.latitude, lon: position.coords.longitude }),
-      () => resolve({ lat: undefined, lon: undefined }),
-      { timeout: 4000 },
-    );
-  });
-}
+import { getCatchLocation } from '../utils/location';
 
 export function CatchSheet({ derby, userId, onClose, onSaved }: { derby: Derby; userId: string; onClose: () => void; onSaved: (message?: string) => void }) {
   const { draft, update, pendingWrites, error: draftError, flush } = useCatchDraft(derby.id, userId, derby.speciesFilter || '');
@@ -26,6 +16,7 @@ export function CatchSheet({ derby, userId, onClose, onSaved }: { derby: Derby; 
   const [photoError, setPhotoError] = useState('');
   const [saving, setSaving] = useState(false);
   const [includeLocation, setIncludeLocation] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [error, setError] = useState('');
   const photoTask = useRef<AbortController>();
   const submitting = useRef(false);
@@ -91,16 +82,20 @@ export function CatchSheet({ derby, userId, onClose, onSaved }: { derby: Derby; 
     photoTask.current?.abort();
     try {
       await flush();
-      const { lat, lon } = includeLocation ? await browserGeo() : { lat: undefined, lon: undefined };
+      setLocating(includeLocation);
+      const { lat, lon, error: locationError } = includeLocation ? await getCatchLocation() : { lat: undefined, lon: undefined, error: undefined };
+      setLocating(false);
       const { item: saved, photoError: storageError } = await saveCatch({ id: draft.id, derby, species: draft.species, measurement: value, note: draft.note, photo, lat, lon });
       if (saved.photoMediaId) void identifyCatch(saved.id).catch(() => undefined);
-      onSaved(storageError || (preparing ? 'Catch saved without a photo.' : undefined));
+      const notices = [storageError || (preparing ? 'Catch saved without a photo.' : ''), locationError ? `Catch saved without a location. ${locationError}` : ''].filter(Boolean);
+      onSaved(notices.join(' ') || undefined);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'The catch could not be saved.');
     } finally {
       submitting.current = false;
       setPreparing(false);
       setSaving(false);
+      setLocating(false);
     }
   }
 
@@ -134,15 +129,18 @@ export function CatchSheet({ derby, userId, onClose, onSaved }: { derby: Derby; 
         {(photo || preparing) && <button className="button button--small" type="button" disabled={saving} onClick={removePhoto}>{preparing ? 'Skip photo' : 'Remove photo'}</button>}
         {photoError && <p className="form-error" role="status">{photoError}</p>}
 
-        <details className="catch-extras"><summary>Note & location <small>optional</small></summary>
+        <div className="catch-location-option">
+          <label className="checkbox-field"><input type="checkbox" checked={includeLocation} disabled={saving} onChange={event => setIncludeLocation(event.target.checked)} aria-describedby="catch-location-help" /><span>Include my location</span></label>
+          <small id="catch-location-help">Adds this catch to the map. Shared with derby members; no continuous tracking.</small>
+        </div>
+        <details className="catch-extras"><summary>Add a note <small>optional</small></summary>
           <div className="field-form">
             <label><span>Note</span><input value={draft?.note ?? ''} disabled={!draft || saving} onChange={(event) => void update({ note: event.target.value })} placeholder="Catch details" maxLength={500} /></label>
-            <label className="checkbox-field"><input type="checkbox" checked={includeLocation} disabled={saving} onChange={event => setIncludeLocation(event.target.checked)} /><span>Include my location</span></label>
           </div>
         </details>
         {draftError && <p className="form-error" role="status">{draftError}</p>}
         {error && <p className="form-error" role="alert">{error}</p>}
-        <button className="button button--primary button--full button--large sheet-save" type="submit" disabled={!draft || saving}>{saving ? 'Saving catch…' : preparing ? 'Save catch without photo' : 'Save catch'}</button>
+        <button className="button button--primary button--full button--large sheet-save" type="submit" disabled={!draft || saving}>{locating ? 'Getting location…' : saving ? 'Saving catch…' : preparing ? 'Save catch without photo' : 'Save catch'}</button>
         <p className="durable-note"><ShieldCheck size={18} /> Saved on this device first, then synced when online.</p>
       </form>
     </Sheet>

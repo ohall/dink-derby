@@ -41,7 +41,7 @@ for (const viewport of [{ width: 375, height: 812 }, { width: 320, height: 740 }
     await expect(page.getByRole('button', { name: 'Invite anglers', exact: true })).toBeFocused();
 
     await catchButton.click();
-    await page.getByText('Note & location', { exact: false }).click();
+    await page.getByText('Add a note', { exact: false }).click();
     await expect(page.getByLabel('Include my location')).not.toBeChecked();
     await expect(page.getByRole('button', { name: 'Save catch', exact: true })).toBeEnabled();
     await page.getByRole('button', { name: 'Save catch', exact: true }).click();

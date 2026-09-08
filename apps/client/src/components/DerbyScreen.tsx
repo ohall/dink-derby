@@ -31,6 +31,7 @@ import { getMediaDownloadUrl } from '../lib/api';
 import { Sheet } from './Sheet';
 import { EditCatchSheet } from './EditCatchSheet';
 import type { DerbySection } from '../domain/navigation';
+import { DerbyMap } from './DerbyMap';
 
 type DerbyScreenProps = {
   derby: Derby;
@@ -271,8 +272,11 @@ export function DerbyScreen({ derby, tab, onTabChange: setTab, currentUser, onBa
       <nav className="derby-tabs" aria-label="Derby sections">
         <button type="button" className={tab === 'feed' ? 'active' : ''} aria-pressed={tab === 'feed'} onClick={() => setTab('feed')}><MessageCircle size={18} /> Catches & chat</button>
         <button type="button" className={tab === 'standings' ? 'active' : ''} aria-pressed={tab === 'standings'} onClick={() => setTab('standings')}><Trophy size={18} /> {complete ? 'Results' : 'Standings'}</button>
+        <button type="button" className={tab === 'map' ? 'active' : ''} aria-pressed={tab === 'map'} onClick={() => setTab('map')}><MapPin size={18} /> Map</button>
         <button type="button" className={tab === 'rules' || tab === 'activity' ? 'active' : ''} aria-pressed={tab === 'rules' || tab === 'activity'} onClick={() => setTab('rules')}><Ruler size={18} /> Rules & info</button>
       </nav>
+
+      {tab === 'map' && <DerbyMap derby={derby} catches={catches} users={users} currentUserId={currentUser?.id} suspended={suspendPhotos} />}
 
       {tab === 'feed' && (
         <section className="feed-layout">

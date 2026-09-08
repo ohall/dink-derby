@@ -1,11 +1,11 @@
-export type DerbySection = 'feed' | 'standings' | 'rules' | 'activity';
+export type DerbySection = 'feed' | 'standings' | 'rules' | 'activity' | 'map';
 export type AppRoute = { derbyId?: string; section: DerbySection; history: boolean };
 
 export function readRoute(search: string): AppRoute {
   const params = new URLSearchParams(search);
   const view = params.get('view');
   return { derbyId: params.get('derby') || undefined, history: view === 'past',
-    section: view === 'standings' || view === 'rules' || view === 'activity' ? view : 'feed' };
+    section: view === 'standings' || view === 'rules' || view === 'activity' || view === 'map' ? view : 'feed' };
 }
 
 export function routeUrl(route: AppRoute, location: Pick<Location, 'pathname' | 'search' | 'hash'>) {

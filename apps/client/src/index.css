@@ -345,7 +345,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .photo-picker > small { font-size: .85rem; }
 .photo-picker--filled img { height: 170px; object-fit: contain; }
 .button--small { min-height: 44px; }
-.field-form > .checkbox-field { display: flex; align-items: center; gap: 12px; min-height: 44px; cursor: pointer; }
+.field-form > .checkbox-field, .catch-location-option .checkbox-field { display: flex; align-items: center; gap: 12px; min-height: 44px; cursor: pointer; }
 .checkbox-field input { width: 22px; min-height: 22px; height: 22px; flex: 0 0 22px; }
 .checkbox-field > span { gap: 8px; flex-wrap: wrap; }
 .durable-note { font-size: .8rem; }
@@ -370,6 +370,48 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .removed-catches { margin-top: 16px; }
 .removed-catches summary { min-height: 44px; padding: 12px 0; cursor: pointer; font-weight: 650; }
 .removed-catches > div { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-block: 12px; border-top: 1px solid var(--line); }
+.derby-map { padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper-bright); }
+.map-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-bottom: 12px; }
+.map-heading h2 { margin: 0 0 6px; font-size: 1.6rem; }
+.map-heading p { margin: 0; color: #4b6054; }
+.map-filter { display: flex; padding: 3px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+.map-filter button { min-height: 44px; padding: 8px 14px; border: 0; border-radius: 9px; background: transparent; color: var(--forest); font: 700 .9rem var(--sans); cursor: pointer; }
+.map-filter button[aria-pressed="true"] { background: var(--forest); color: white; }
+.map-empty, .map-loading { padding: 32px 18px; text-align: center; background: #edf0e7; border-radius: 12px; line-height: 1.6; }
+.map-empty h3 { margin: 10px 0; }
+.map-empty p { max-width: 460px; margin: 0 auto 14px; }
+.map-missing, .map-help { color: #4b6054; line-height: 1.5; font-size: .9rem; }
+.catch-map-frame { position: relative; isolation: isolate; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
+.catch-map-canvas { height: clamp(300px, 50dvh, 500px); width: 100%; background: #dde6dc; font-family: var(--sans); }
+.catch-map-frame .leaflet-container .leaflet-control-zoom a { width: 44px; height: 44px; line-height: 44px; color: var(--forest); }
+.catch-map-frame .leaflet-container .leaflet-popup-close-button { width: 44px; height: 44px; line-height: 44px; color: var(--forest); font-size: 24px; }
+.map-popup-detail { display: grid; gap: 6px; padding-right: 18px; line-height: 1.5; color: var(--forest); overflow-wrap: anywhere; }
+.map-popup-detail strong { font-size: .95rem; }
+.map-popup-catches { display: flex; flex-wrap: wrap; gap: 4px; }
+.map-popup-catches button { min-height: 44px; padding: 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper-bright); color: var(--forest); font: inherit; cursor: pointer; }
+.map-popup-catches button[aria-pressed="true"] { background: var(--forest); color: white; }
+.catch-map-canvas .leaflet-control-attribution { max-width: 100%; padding: 4px 6px; font-size: 11px; background: #fff; }
+.catch-map-canvas .leaflet-control-attribution a { color: #165448; }
+.catch-map-pin { display: grid; place-items: center; background: transparent; }
+.catch-map-pin > span { display: grid; place-items: center; min-width: 34px; height: 34px; padding: 0 5px; border: 3px solid white; border-radius: 50%; color: white; background: #123b35; box-shadow: 0 2px 5px #0006; font: 800 14px var(--sans); }
+.catch-map-pin--selected > span { background: #a84322; outline: 3px solid #f4c95e; }
+.catch-map-pin:focus-visible { outline: 3px solid #a84322; outline-offset: 2px; border-radius: 50%; }
+.map-overlay-controls { position: absolute; z-index: 800; top: 10px; right: 10px; }
+.map-overlay-controls .button { padding: 8px 12px; min-height: 44px; background: white; box-shadow: 0 1px 5px #0003; }
+.map-tile-notice { position: absolute; z-index: 800; bottom: 32px; left: 10px; right: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px; border-radius: 8px; color: var(--forest-deep); background: #fff9e9; box-shadow: 0 1px 5px #0003; font-size: .85rem; line-height: 1.4; }
+.map-tile-notice span { flex: 1 1 180px; }
+.map-tile-notice button { min-height: 44px; padding: 6px 10px; color: var(--forest); background: white; border: 1px solid var(--line); border-radius: 6px; font: 700 .8rem var(--sans); cursor: pointer; }
+.map-selection { display: grid; gap: 5px; padding: 14px; margin-bottom: 12px; border-left: 4px solid #a84322; background: #f5eddd; line-height: 1.4; overflow-wrap: anywhere; }
+.map-selection time { color: #4b6054; font-size: .9rem; }
+.map-catch-list { list-style: none; margin: 0 0 12px; padding: 0; }
+.map-catch-list li + li { border-top: 1px solid var(--line); }
+.map-catch-list button { display: flex; align-items: flex-start; gap: 12px; width: 100%; min-height: 44px; padding: 14px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--forest); text-align: left; font: inherit; cursor: pointer; }
+.map-catch-list button[aria-pressed="true"] { background: #e6edde; }
+.map-catch-number { display: grid; place-items: center; flex: 0 0 32px; height: 32px; background: var(--forest); color: white; border-radius: 50%; font-weight: 800; }
+.map-catch-copy { display: grid; gap: 5px; min-width: 0; overflow-wrap: anywhere; }
+.map-catch-copy time, .map-catch-copy small { font-size: .83rem; color: #4b6054; }
+.catch-location-option { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #edf0e7; }
+.catch-location-option > small { display: block; margin: 4px 0 0 34px; color: #4b6054; line-height: 1.45; }
 .button--danger { background: #943d2b; color: white; }
 @media (max-width: 760px) {
   .derby-banner { grid-template-columns: 1fr; }
@@ -378,6 +420,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
   .derby-banner__leader > strong { margin: 0; font-size: 1.7rem; }
   .derby-banner__leader > p { margin: 0; min-width: 0; overflow-wrap: anywhere; }
   .derby-tabs button { flex-direction: column; gap: 3px; padding: 8px 3px; font-size: .84rem; }
+  .derby-map { padding: 14px 10px; }
+  .derby-tabs button { font-size: .78rem; }
   .sheet { max-height: 96dvh; padding-bottom: max(20px, env(safe-area-inset-bottom)); }
   .form-grid { grid-template-columns: 1fr; }
   .choice-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }

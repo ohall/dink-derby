@@ -21,7 +21,7 @@ test('recovers a draft, accepts a phone photo, rejects oversized photos, and sav
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('button', { name: /log a catch/i }).first().click();
   await page.getByLabel('Length').fill('18.5');
-  await page.getByText('Note & location', { exact: false }).click();
+  await page.getByText('Add a note', { exact: false }).click();
   await page.getByLabel('Note').fill('Draft survives the camera handoff');
   const picker = page.getByLabel('Catch photo');
   await expect(picker).toBeEnabled(); // The draft is committed before the picker opens.
@@ -69,7 +69,7 @@ test('recovers a draft, accepts a phone photo, rejects oversized photos, and sav
   await picker.setInputFiles({ name: '48mp.jpg', mimeType: 'image/jpeg', buffer: Buffer.from([255,216,255,192,0,11,8,23,160,31,128,1,1,17,0]) });
   await expect(page.getByRole('status').filter({ hasText: '16 MP' })).toBeVisible();
   await expect(preview).toHaveCount(0);
-  await page.getByText('Note & location', { exact: false }).click();
+  await page.getByText('Add a note', { exact: false }).click();
   await page.getByLabel('Note').fill('Oversized photo skipped; fish saved');
   await page.getByRole('button', { name: 'Save catch', exact: true }).click();
   await expect(page.locator('.catch-card').filter({ hasText: 'Oversized photo skipped; fish saved' })).toBeVisible();
@@ -87,7 +87,7 @@ test('recovers a draft, accepts a phone photo, rejects oversized photos, and sav
   } else await context.setOffline(true);
   await page.getByRole('button', { name: /log a catch/i }).first().click();
   await page.getByLabel('Length').fill('9');
-  await page.getByText('Note & location', { exact: false }).click();
+  await page.getByText('Add a note', { exact: false }).click();
   await page.getByLabel('Note').fill('Offline photo survives reload');
   await picker.setInputFiles({ name: 'offline-phone.jpg', mimeType: 'image/jpeg', buffer: Buffer.from(jpeg, 'base64') });
   await expect(preview).toBeVisible();

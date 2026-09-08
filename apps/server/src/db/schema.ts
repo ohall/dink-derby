@@ -6,7 +6,7 @@ export const users = pgTable('users', {
   avatarUrl: text('avatar_url'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}).enableRLS();
 
 export const derbies = pgTable('derbies', {
   id: text('id').primaryKey(),
@@ -25,7 +25,7 @@ export const derbies = pgTable('derbies', {
   isArchived: boolean('is_archived').default(false).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-}, (table) => ({ inviteCodeIndex: uniqueIndex('derbies_invite_code_idx').on(table.inviteCode) }));
+}, (table) => ({ inviteCodeIndex: uniqueIndex('derbies_invite_code_idx').on(table.inviteCode) })).enableRLS();
 
 export const derbyParticipants = pgTable('derby_participants', {
   id: text('id').primaryKey(),
@@ -38,7 +38,7 @@ export const derbyParticipants = pgTable('derby_participants', {
 }, (table) => ({
   derbyUserIndex: uniqueIndex('derby_participants_derby_user_idx').on(table.derbyId, table.userId),
   userIndex: index('derby_participants_user_idx').on(table.userId),
-}));
+})).enableRLS();
 
 export const catches = pgTable('catches', {
   id: text('id').primaryKey(),
@@ -63,7 +63,7 @@ export const catches = pgTable('catches', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),
   clientId: text('client_id').notNull(), // Device that created this catch
-});
+}).enableRLS();
 
 export const chatMessages = pgTable('chat_messages', {
   id: text('id').primaryKey(),
@@ -74,13 +74,13 @@ export const chatMessages = pgTable('chat_messages', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
   clientId: text('client_id').notNull(), // Device that created this message
-});
+}).enableRLS();
 
 export const devices = pgTable('devices', {
   id: text('id').primaryKey(),
   userId: text('user_id').references(() => users.id), // Optional link to authenticated user
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}).enableRLS();
 
 export const reactions = pgTable('reactions', {
   id: text('id').primaryKey(),
@@ -92,7 +92,7 @@ export const reactions = pgTable('reactions', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
   clientId: text('client_id').notNull(),
-});
+}).enableRLS();
 
 export const media = pgTable('media', {
   id: text('id').primaryKey(),
@@ -108,7 +108,7 @@ export const media = pgTable('media', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
   clientId: text('client_id').notNull(),
-});
+}).enableRLS();
 
 export const processedOperations = pgTable('processed_operations', {
   opId: text('op_id').primaryKey(),
@@ -116,7 +116,7 @@ export const processedOperations = pgTable('processed_operations', {
   derbyId: text('derby_id'),
   result: jsonb('result').notNull(),
   processedAt: timestamp('processed_at').defaultNow().notNull(),
-});
+}).enableRLS();
 
 export const derbyEvents = pgTable('derby_events', {
   id: text('id').primaryKey(),
@@ -127,4 +127,4 @@ export const derbyEvents = pgTable('derby_events', {
   type: text('type').notNull(),
   payload: jsonb('payload').notNull(),
   serverCreatedAt: timestamp('server_created_at').defaultNow().notNull(),
-});
+}).enableRLS();

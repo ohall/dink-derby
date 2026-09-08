@@ -76,6 +76,33 @@ integration('Postgres sync integration', () => {
     await databasePool.end();
   });
 
+  it('keeps all app tables API-only, including against direct membership changes', async () => {
+    const tables = ['catches', 'chat_messages', 'derbies', 'derby_events', 'derby_participants', 'devices', 'media', 'processed_operations', 'reactions', 'users'];
+    const result = await databasePool.query('select relname, relrowsecurity from pg_class where relnamespace = $1::regnamespace and relname = any($2)', ['public', tables]);
+    expect(result.rows).toHaveLength(tables.length);
+    expect(result.rows.every(row => row.relrowsecurity)).toBe(true);
+    for (const role of (await databasePool.query("select rolname from pg_roles where rolname in ('anon', 'authenticated')")).rows) {
+      for (const table of tables) {
+        const grants = await databasePool.query('select has_table_privilege($1, $2, $3) as allowed', [role.rolname, `public.${table}`, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER']);
+        expect(grants.rows[0].allowed).toBe(false);
+      }
+    }
+    // Even a future accidental CRUD grant cannot bypass the default-deny RLS.
+    const client = await databasePool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("INSERT INTO public.users (id, display_name) VALUES ('rls-test-user', 'RLS test')");
+      await client.query("INSERT INTO public.derbies (id, name, body_of_water_name, scoring_mode, created_by_user_id) VALUES ('rls-test-derby', 'RLS test', 'Test water', 'count', 'rls-test-user')");
+      await client.query("INSERT INTO public.derby_participants (id, derby_id, user_id, removed_at) VALUES ('rls-test-membership', 'rls-test-derby', 'rls-test-user', now())");
+      await client.query('CREATE ROLE dink_removal_rls_test NOLOGIN');
+      await client.query('GRANT USAGE ON SCHEMA public TO dink_removal_rls_test');
+      await client.query('GRANT SELECT, UPDATE ON public.derby_participants TO dink_removal_rls_test');
+      await client.query('SET LOCAL ROLE dink_removal_rls_test');
+      expect((await client.query('SELECT id FROM public.derby_participants')).rows).toEqual([]);
+      expect((await client.query('UPDATE public.derby_participants SET removed_at = NULL RETURNING id')).rows).toEqual([]);
+    } finally { await client.query('ROLLBACK'); client.release(); }
+  });
+
   it('creates, joins, syncs, and scopes a derby across two identities', async () => {
     const created = await processSync(deviceA.id, userA.id, [
       operation('user', userA),

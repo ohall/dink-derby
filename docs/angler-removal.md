@@ -17,6 +17,8 @@ Sync excludes removed memberships from data visibility and rejects new activity.
 
 Database migration: `apps/server/drizzle/0006_participant_removal.sql`. Apply this additive migration before releasing the API, then release the client. Older clients remain server-restricted but may display cached data until updated.
 
+Migration `0007_api_only_app_tables.sql` closes a pre-existing direct database bypass: all ten app tables enable RLS with no browser policies and revoke `PUBLIC`, `anon`, and `authenticated` privileges (including TRUNCATE and the event sequence). The Fastify table-owner connection remains authorized. Supabase Auth and private Storage are unchanged. These tables deliberately do not offer a direct Data API; future app tables must also enable RLS and restrict grants.
+
 ## Verification
 
 - Client component tests: creator-only controls, safe cancellation, success, offline/error handling.

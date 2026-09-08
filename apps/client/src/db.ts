@@ -23,6 +23,8 @@ export type CatchDraft = {
   measurement: string;
   species: string;
   note: string;
+  // Optional for drafts created before location became enabled by default.
+  includeLocation?: boolean;
   photo?: PreparedPhoto;
   isOpen: boolean;
   updatedAt: string;

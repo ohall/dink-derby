@@ -7,6 +7,7 @@ export async function openCatchDraft(derbyId: string, userId: string, defaultSpe
       id: crypto.randomUUID(), derbyId, userId, measurement: '',
       species: defaultSpecies, note: '', isOpen: true, updatedAt: new Date().toISOString(),
     };
+    draft.includeLocation ??= true;
     draft.isOpen = true;
     draft.updatedAt = new Date().toISOString();
     await db.catchDrafts.put(draft);

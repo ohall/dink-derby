@@ -8,7 +8,7 @@ numbered `+` pin and remain individually selectable. **Fit all catches** resets 
 
 ## Location capture and privacy
 
-- **Include my location** is visible in the catch form and off by default.
+- **Include my location** is visible in the catch form and **on by default** for a new catch. Uncheck it to save without a location. An explicit opt-out is preserved with the draft across closing, reopening and reloading; each new catch starts enabled.
 - A fresh, one-shot browser position is requested only when saving with this option enabled.
 - Coordinates are shared through the existing authenticated derby sync, not a public catch endpoint.
 - The browser permission prompt and GPS have a five-second independent deadline.

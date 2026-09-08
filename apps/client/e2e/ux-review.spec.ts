@@ -42,7 +42,8 @@ for (const viewport of [{ width: 375, height: 812 }, { width: 320, height: 740 }
 
     await catchButton.click();
     await page.getByText('Add a note', { exact: false }).click();
-    await expect(page.getByLabel('Include my location')).not.toBeChecked();
+    await expect(page.getByLabel('Include my location')).toBeChecked();
+    await page.getByLabel('Include my location').uncheck();
     await expect(page.getByRole('button', { name: 'Save catch', exact: true })).toBeEnabled();
     await page.getByRole('button', { name: 'Save catch', exact: true }).click();
     await expect(page.getByRole('dialog')).toHaveCount(1);
@@ -54,6 +55,10 @@ for (const viewport of [{ width: 375, height: 812 }, { width: 320, height: 740 }
     await catchButton.click();
     await expect(page.getByLabel('Length', { exact: true })).toHaveValue('12.5');
     await expect(page.getByLabel('Note')).toHaveValue('Keep this draft');
+    await expect(page.getByLabel('Include my location')).not.toBeChecked();
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Log a catch', exact: true })).toBeVisible();
+    await expect(page.getByLabel('Include my location')).not.toBeChecked();
     await page.screenshot({ path: `/tmp/dink-derby-catch-ux-${viewport.width}.png`, fullPage: true, animations: 'disabled' });
     await page.getByRole('button', { name: 'Save catch', exact: true }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);

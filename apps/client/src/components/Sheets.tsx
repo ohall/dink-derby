@@ -16,7 +16,7 @@ export function CatchSheet({ derby, userId, onClose, onSaved }: { derby: Derby; 
   const [preparing, setPreparing] = useState(false);
   const [photoError, setPhotoError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [includeLocation, setIncludeLocation] = useState(false);
+  const includeLocation = draft?.includeLocation ?? true;
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState('');
   const photoTask = useRef<AbortController>();
@@ -131,8 +131,8 @@ export function CatchSheet({ derby, userId, onClose, onSaved }: { derby: Derby; 
         {photoError && <p className="form-error" role="status">{photoError}</p>}
 
         <div className="catch-location-option">
-          <label className="checkbox-field"><input type="checkbox" checked={includeLocation} disabled={saving} onChange={event => setIncludeLocation(event.target.checked)} aria-describedby="catch-location-help" /><span>Include my location</span></label>
-          <small id="catch-location-help">Adds this catch to the map. Shared with derby members; no continuous tracking.</small>
+          <label className="checkbox-field"><input type="checkbox" checked={includeLocation} disabled={!draft || saving} onChange={event => void update({ includeLocation: event.target.checked })} aria-describedby="catch-location-help" /><span>Include my location</span></label>
+          <small id="catch-location-help">On by default. Uncheck to save without a location. Shared with derby members; no continuous tracking.</small>
         </div>
         <details className="catch-extras"><summary>Add a note <small>optional</small></summary>
           <div className="field-form">

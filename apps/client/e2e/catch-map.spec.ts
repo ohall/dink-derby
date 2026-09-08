@@ -23,8 +23,8 @@ async function logCatch(page: Page, species: string, locate = true) {
   await expect(page.locator('.leaflet-container')).toHaveCount(0);
   await page.getByLabel('Weight', { exact: true }).fill('2.5');
   await page.getByLabel('Species').fill(species);
-  await expect(page.getByLabel('Include my location')).not.toBeChecked();
-  if (locate) await page.getByLabel('Include my location').check();
+  await expect(page.getByLabel('Include my location')).toBeChecked();
+  if (!locate) await page.getByLabel('Include my location').uncheck();
   await page.getByRole('button', { name: 'Save catch', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 }

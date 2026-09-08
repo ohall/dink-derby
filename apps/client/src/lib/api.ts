@@ -27,6 +27,15 @@ export async function joinDerbyRequest(input: JoinDerbyRequest) {
   return response.json() as Promise<JoinDerbyResponse>;
 }
 
+export async function findNearbyWaters(lat: number, lon: number, signal: AbortSignal) {
+  // Load runtime validation only for an explicit lookup, not every app launch.
+  const [response, { NearbyWatersResponseSchema }] = await Promise.all([
+    apiFetch('/waters/nearby', { method: 'POST', body: JSON.stringify({ lat: Number(lat.toFixed(4)), lon: Number(lon.toFixed(4)) }), signal }),
+    import('@dink-derby/shared-types'),
+  ]);
+  return NearbyWatersResponseSchema.parse(await response.json());
+}
+
 export async function uploadMedia(mediaId: string, contentType: string, blob: Blob) {
   if (!supabase) return undefined;
   const response = await apiFetch('/media/upload-url', {

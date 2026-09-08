@@ -4,6 +4,9 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  // shared-types is a linked CommonJS workspace, now used for runtime validation.
+  optimizeDeps: { include: ['@dink-derby/shared-types'] },
+  build: { commonjsOptions: { include: [/shared-types\/dist/, /node_modules/] } },
   plugins: [
     react(),
     VitePWA({

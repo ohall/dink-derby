@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import Fastify from 'fastify';
+import Fastify, { type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import { z, ZodError } from 'zod';
@@ -12,6 +12,8 @@ import {
   MediaUploadResponseSchema,
   SyncRequestSchema,
   SyncResponseSchema,
+  NearbyWatersRequestSchema,
+  NearbyWatersResponseSchema,
 } from '@dink-derby/shared-types';
 import { and, eq } from 'drizzle-orm';
 
@@ -21,10 +23,11 @@ import { derbyParticipants, derbies, devices, media, users, catches } from './db
 import { authenticate, httpError } from './auth';
 import { createMediaDownload, createMediaUpload, mediaBucket } from './storage';
 import { identifyCatch, isIdentifyConfigured } from './identify';
+import { lookupNearbyWaters } from './nearbyWaters';
 
 type SyncProcessor = typeof processSync;
 
-export const buildServer = (syncProcessor: SyncProcessor = processSync) => {
+export const buildServer = (syncProcessor: SyncProcessor = processSync, waterLookup = lookupNearbyWaters) => {
   const app = Fastify({
     logger: true,
     bodyLimit: Number(process.env.BODY_LIMIT_BYTES || 2_000_000),
@@ -56,6 +59,25 @@ export const buildServer = (syncProcessor: SyncProcessor = processSync) => {
 
   app.get('/', async () => {
     return { message: 'Dink Derby API is running' };
+  });
+
+  // Register after plugins have loaded so rate-limit's onRoute hook is active.
+  app.register(async (routes) => {
+    const actors = new WeakMap<FastifyRequest, string>();
+    routes.post('/waters/nearby', {
+      preValidation: async (request) => { actors.set(request, await authenticate(request)); },
+      // Verified identity, not a shared mobile-network/proxy IP or an untrusted header.
+      config: { rateLimit: { max: 5, timeWindow: '1 minute', hook: 'preHandler', keyGenerator: (request: FastifyRequest) => actors.get(request)! } },
+    }, async (request, reply) => {
+      const input = NearbyWatersRequestSchema.parse(request.body);
+      reply.header('Cache-Control', 'private, no-store');
+      try { return NearbyWatersResponseSchema.parse(await waterLookup(input)); }
+      catch {
+        // Do not log GPS coordinates, upstream URLs, tokens or response geometry.
+        request.log.warn('Nearby water provider unavailable');
+        return reply.status(503).send({ message: 'Nearby waters are unavailable right now. Enter the water name yourself or try again.' });
+      }
+    });
   });
 
   app.post(

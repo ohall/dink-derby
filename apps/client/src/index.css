@@ -413,6 +413,18 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .catch-location-option { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #edf0e7; }
 .catch-location-option > small { display: block; margin: 4px 0 0 34px; color: #4b6054; line-height: 1.45; }
 .button--danger { background: #943d2b; color: white; }
+.water-lookup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.water-lookup-actions .button { min-height: 44px; }
+.water-lookup-help, .water-source { font-size: .8rem; color: #4b6054; line-height: 1.5; margin: 8px 0 0; }
+.water-source a { text-decoration: underline; color: var(--forest); }
+.water-lookup-message { margin: 10px 0; font-size: .9rem; line-height: 1.5; }
+.water-results { list-style: none; display: grid; gap: 6px; margin: 12px 0 0; padding: 0; }
+.water-results button { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 54px; width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 12px; color: var(--forest); background: var(--paper-bright); text-align: left; font: inherit; cursor: pointer; }
+.water-results button > span:first-child { display: grid; gap: 5px; min-width: 0; overflow-wrap: anywhere; }
+.water-results small { font-size: .8rem; color: #4b6054; }
+.water-results button[aria-pressed="true"] { background: #e6edde; border-color: var(--forest); }
+.water-results svg { flex: 0 0 20px; }
+.water-use-label { font-size: .85rem; font-weight: 700; }
 @media (max-width: 760px) {
   .derby-banner { grid-template-columns: 1fr; }
   .derby-banner__copy { padding: 18px; }

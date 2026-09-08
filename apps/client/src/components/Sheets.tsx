@@ -8,6 +8,7 @@ import { preparePhoto } from '../utils/photo';
 import { useCatchDraft } from './useCatchDraft';
 import { Sheet } from './Sheet';
 import { getCatchLocation } from '../utils/location';
+import { WaterSuggestions } from './WaterSuggestions';
 
 export function CatchSheet({ derby, userId, onClose, onSaved }: { derby: Derby; userId: string; onClose: () => void; onSaved: (message?: string) => void }) {
   const { draft, update, pendingWrites, error: draftError, flush } = useCatchDraft(derby.id, userId, derby.speciesFilter || '');
@@ -189,6 +190,7 @@ export function CreateDerbySheet({ onClose, onCreated }: { onClose: () => void; 
       <form className="field-form" onSubmit={submit}>
         <label><span>Derby name</span><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Weekend Throwdown" required /></label>
         <label><span>Water</span><input value={water} onChange={(event) => setWater(event.target.value)} placeholder="Lake, pond, or river" required /></label>
+        <WaterSuggestions value={water} onSelect={setWater} disabled={saving} />
 
         <fieldset className="choice-fieldset">
           <legend>What counts?</legend>

@@ -259,3 +259,25 @@ export const IdentifyCatchResponseSchema = z.object({
 });
 
 export type IdentifyCatchResponse = z.infer<typeof IdentifyCatchResponseSchema>;
+
+// Location lookup does not persist a derby location; the angler confirms a name.
+export const NearbyWatersRequestSchema = z.object({
+  lat: z.number().finite().min(-90).max(90),
+  lon: z.number().finite().min(-180).max(180),
+}).strict();
+
+export const WaterSuggestionSchema = z.object({
+  id: z.string().min(1).max(150),
+  name: z.string().trim().min(1).max(150),
+  kind: z.enum(['Lake / pond', 'Reservoir', 'River / stream', 'Canal']),
+  distanceMeters: z.number().int().nonnegative(),
+  containsLocation: z.boolean(),
+});
+export type WaterSuggestion = z.infer<typeof WaterSuggestionSchema>;
+export const NearbyWatersResponseSchema = z.object({
+  suggestions: z.array(WaterSuggestionSchema).max(6),
+  radiusMeters: z.literal(5000),
+  source: z.literal('USGS National Hydrography Dataset'),
+  partial: z.boolean(),
+});
+export type NearbyWatersResponse = z.infer<typeof NearbyWatersResponseSchema>;

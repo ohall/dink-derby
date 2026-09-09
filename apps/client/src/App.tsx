@@ -13,6 +13,7 @@ import { isDerbyComplete, isDerbyInHistory } from './domain/derbyLifecycle';
 import { useAppRoute } from './components/useAppRoute';
 import { useInstallPrompt } from './components/useInstallPrompt';
 import { InstallSheet } from './components/InstallSheet';
+import { InstallReminder } from './components/InstallReminder';
 import { clearInviteFromUrl, parseDerbyInvite } from './domain/invites';
 
 type SheetName = 'create' | 'join' | 'profile' | 'catch' | 'install' | null;
@@ -107,6 +108,7 @@ export default function App() {
   return (
     <div className="app-canvas">
       <BrandHeader user={user} showSync={!selectedDerby} onHome={goHome} onProfile={() => setSheet('profile')} install={install.state} onShowInstall={() => setSheet('install')} />
+      {!route.derbyId && !sheet && install.showReminder && <InstallReminder install={install.state} onShowInstructions={() => setSheet('install')} onDismiss={install.dismiss} />}
 
       {selectedDerby ? (
         <DerbyScreen key={selectedDerby.id} derby={selectedDerby} isFormerParticipant={removedDerbyIds.includes(selectedDerby.id)} tab={route.section} onTabChange={(section, replace) => navigate({ ...route, section }, replace)} currentUser={user} suspendPhotos={sheet === 'catch' && !removedDerbyIds.includes(selectedDerby.id)} onBack={goHome} onLogCatch={() => setSheet('catch')} />
@@ -120,7 +122,7 @@ export default function App() {
       {sheet === 'join' && <JoinDerbySheet key={invite ?? 'manual'} initialCode={invite} invalidLink={invite === ''} onClose={closeInvite} onJoined={derby => { closeInvite(); navigate({ derbyId: derby.id, section: isDerbyComplete(derby) ? 'standings' : 'feed', history: false }); }} />}
       {sheet === 'profile' && <ProfileSheet user={user} onClose={() => setSheet(invite !== undefined ? 'join' : null)} />}
       {sheet === 'catch' && selectedDerby && !removedDerbyIds.includes(selectedDerby.id) && <CatchSheet key={`catch-${selectedDerby.id}`} derby={selectedDerby} userId={settings.currentUserId} onClose={() => setSheet(null)} onSaved={(message) => { setSheet(null); setNotice(message || 'Catch saved.'); }} />}
-      {sheet === 'install' && <InstallSheet onClose={() => { install.dismiss(); setSheet(null); }} />}
+      {sheet === 'install' && <InstallSheet platform={'platform' in install.state ? install.state.platform : 'desktop'} onClose={() => { install.dismiss(); setSheet(null); }} />}
       {notice && <div className="toast" role="status">{notice}</div>}
     </div>
   );

@@ -1,20 +1,16 @@
 import { Download } from 'lucide-react';
 import type { InstallState } from './useInstallPrompt';
 
-export function InstallButton({ install, onShowInstructions }: { install: InstallState; onShowInstructions: () => void }) {
-  if (install.kind === 'native') {
-    return (
-      <button className="install-button" type="button" onClick={() => void install.prompt()} title="Install Dink Derby on this device">
-        <Download size={18} /><span>Install</span>
-      </button>
-    );
-  }
-  if (install.kind === 'ios') {
-    return (
-      <button className="install-button" type="button" onClick={onShowInstructions} title="Add Dink Derby to your home screen">
-        <Download size={18} /><span>Install</span>
-      </button>
-    );
-  }
-  return null;
+export function InstallButton({ install, onShowInstructions, className = 'install-button' }: { install: InstallState; onShowInstructions: () => void; className?: string }) {
+  if (install.kind === 'installed' || install.kind === 'checking') return null;
+  const onClick = async () => {
+    if (install.kind === 'prompting') return;
+    if (install.kind === 'native' && await install.prompt()) return;
+    onShowInstructions();
+  };
+  return (
+    <button className={className} type="button" disabled={install.kind === 'prompting'} onClick={() => void onClick()} title="Install Dink Derby on this device">
+      <Download size={18} aria-hidden="true" /><span>{install.kind === 'prompting' ? 'Installing…' : 'Install app'}</span>
+    </button>
+  );
 }

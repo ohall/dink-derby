@@ -2,9 +2,10 @@
 
 ## Current work
 
-- [ ] Release and verify resume-triggered sync when returning from the camera or another app.
+- [x] Release and verify resume-triggered sync when returning from another app (September 11; automated visibility-without-focus test passed against production). Physical camera/lock testing remains below.
 - [ ] Add recoverable accounts and cross-device sign-in, preserving existing angler IDs and history.
-- [ ] Decide on logging/analytics after reviewing a free-tier proposal. Do not enable collection before approval.
+- [ ] Approve or revise the [PostHog free-tier proposal](docs/logging-analytics-proposal.md). Do not enable collection before approval.
+- [ ] Complete the [account recovery production gate](docs/account-recovery.md): SMTP, OTP templates, identity linking, and real two-browser email verification before enabling the feature.
 
 ## Field testing — Oakley and the kids
 

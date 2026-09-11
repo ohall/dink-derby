@@ -2,7 +2,16 @@
 
 Implementation uses Supabase email codes, retaining the existing anonymous user's ID. Guest play remains available. No app database migration or browser table grants are needed.
 
-Status (September 11, 2026): implementation complete behind a default-off flag. Supabase dashboard login and real email delivery/configuration still require verification; this feature is **not enabled or deployed to production**. Production remains the separately documented resume-sync release.
+Status (September 11, 2026): implementation complete behind a default-off flag. Dashboard access is working, and the Resend sending domain has been created; DNS verification and live email configuration/testing remain incomplete. This feature is **not enabled or deployed to production**. Production remains the separately documented resume-sync release.
+
+## Email setup checkpoint
+
+- Use the user's existing Resend account (`oakley349`), not a duplicate Vercel Marketplace resource. No paid plan or billing change was made.
+- Sending domain: `auth.dinkderby.com`, region `us-east-1`, Resend domain ID `d1d19b81-b95a-44a7-a78e-76a86957d5e9`. Sending is selected; receiving is off.
+- DNS is hosted by GoDaddy (`ns27.domaincontrol.com`, `ns28.domaincontrol.com`). Required records, relative to `dinkderby.com`: TXT `resend._domainkey.auth` with the public DKIM value shown in Resend; MX `send.auth` → `feedback-smtp.us-east-1.amazonses.com` (priority 10); TXT `send.auth` → `v=spf1 include:amazonses.com ~all`.
+- **No DNS changes were saved.** Automatic configuration did not open its authorization window through browser automation, and GoDaddy's hostname field did not retain automated input. The unsaved manual draft was canceled. The existing eight DNS records, including website/API records and root DMARC policy, remain unchanged.
+- User handoff: open the [Resend domain setup](https://resend.com/domains/add/d1d19b81-b95a-44a7-a78e-76a86957d5e9), click **GoDaddy Auto configure**, and approve only the intended email DNS records. Then verify propagation and Resend's verified status.
+- After verification: create a sending-only, domain-scoped key, configure Supabase SMTP, confirm tracking is disabled, configure code templates and manual linking, and complete the production gate below. No Resend secret has been created, stored in the repository, or placed in the frontend.
 
 ## Verification completed
 

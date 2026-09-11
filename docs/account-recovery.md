@@ -2,7 +2,7 @@
 
 Implementation uses Supabase email codes, retaining the existing anonymous user's ID. Guest play remains available. No app database migration or browser table grants are needed.
 
-Status (September 11, 2026): implementation complete behind a default-off flag. Resend's sending domain and DNS are verified; Supabase SMTP credentials, auth configuration, and live email testing remain incomplete. This feature is **not enabled or deployed to production**. Production remains the separately documented resume-sync release.
+Status (September 11, 2026): implementation complete behind a default-off flag. Resend's sending domain and DNS are verified, the restricted sending key exists, and Supabase custom SMTP is enabled. Code-template bodies and the production Site URL are saved. Manual account linking and real email/recovery tests remain pending. This feature is **not enabled or deployed to production**. Production remains the separately documented resume-sync release.
 
 ## Email setup checkpoint
 
@@ -10,9 +10,12 @@ Status (September 11, 2026): implementation complete behind a default-off flag. 
 - Sending domain: `auth.dinkderby.com`, region `us-east-1`, Resend domain ID `d1d19b81-b95a-44a7-a78e-76a86957d5e9`. Resend reports **Verified** (September 11, 1:57 PM, dashboard time). Sending is selected; receiving is off.
 - DNS is hosted by GoDaddy (`ns27.domaincontrol.com`, `ns28.domaincontrol.com`). The user completed automatic configuration. Authoritative DNS confirms TXT `resend._domainkey.auth` matches Resend's DKIM key and MX `send.auth` points to `feedback-smtp.us-east-1.amazonses.com` (priority 10). GoDaddy's managed SPF record includes `dc-fd741b8612._spfm.send.auth.dinkderby.com`, which resolves to `v=spf1 include:amazonses.com ~all`; do not replace it merely because it differs from the literal example.
 - Resend **Enforced TLS** was saved and verified. Receiving servers without TLS will reject delivery rather than receive plaintext authentication codes. Tracking has not been configured.
-- Credential handoff: the [Resend API-key form](https://resend.com/api-keys?new=true) is prepared with name `Dink Derby Supabase SMTP`, permission **Sending access**, and domain **auth.dinkderby.com**. The user must create the key and paste it directly into Supabase; no key has been created by the agent or stored in the repository/frontend.
-- Supabase SMTP remains an **unsaved draft**. Use sender `no-reply@auth.dinkderby.com`, sender name `Dink Derby`, host `smtp.resend.com`, port `465`, username `resend`, password equal to the Resend key, and minimum interval `60` seconds. Sender name and host were retained in the draft; sender email and username must be entered by the user because those fields did not retain automated input. The user must finish credential entry and save.
-- Next: verify saved SMTP settings, configure code templates and manual linking, then test real delivery and recovery before enabling the production feature flag. DNS verification alone does not establish that auth email works.
+- Credential handoff completed by the user. The Resend key list confirms `Dink Derby Supabase SMTP` exists with **Sending access** and currently reports **No activity**. The creation form was scoped to **auth.dinkderby.com**. No secret key was read or stored in the repository/frontend.
+- Supabase custom SMTP is now **enabled**, and the previously locked template editors are available. Expected sender is `no-reply@auth.dinkderby.com`, sender name `Dink Derby`, host `smtp.resend.com`, port `465`, username `resend`, and minimum interval `60` seconds. The user entered and saved credentials directly; the automation view does not expose all field values. Actual SMTP authentication/delivery is still unverified.
+- Saved and revisited the **Magic link or OTP** template: subject `Sign in to Dink Derby` and a body displaying `{{ .Token }}`. Saved and revisited the **Change email address** body with a code and account-save instructions; subject entry was attempted, but its value is not exposed by the automation view and must be checked on the actual delivered message. A transient template-validation fetch error cleared on retry.
+- Changed the Site URL from `http://localhost:3000` to `https://dinkderby.com` and saved. The redirect allowlist is empty; no wildcard/preview redirects were added.
+- Email provider, email confirmation, secure email change, and anonymous sign-ins remain enabled. Email OTPs are **8 digits**, expiring in **3600 seconds**. Existing rate limits were left unchanged (the email-send quota was not readable in the automation view).
+- **Allow manual linking remains off**. Obtain confirmation for enabling this authentication capability, then test same-ID linking and second-browser recovery using a user-approved test email before enabling the production flag. Custom SMTP being enabled does not establish that auth email works.
 
 ## Verification completed
 

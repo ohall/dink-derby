@@ -73,9 +73,9 @@ export class DinkDerbyDatabase extends Dexie {
   derbyEvents!: Table<DerbyEventEntry, string>;
   catchDrafts!: Table<CatchDraft, string>;
 
-  constructor() {
+  constructor(name = 'DinkDerbyFieldDB') {
     // A fresh database name intentionally separates this rebuild from the legacy client.
-    super('DinkDerbyFieldDB');
+    super(name);
 
     this.version(1).stores({
       users: 'id, displayName',
@@ -101,4 +101,36 @@ export class DinkDerbyDatabase extends Dexie {
   }
 }
 
-export const db = new DinkDerbyDatabase();
+export const LEGACY_DATABASE = 'DinkDerbyFieldDB';
+export const ACTIVE_DATABASE_KEY = 'dink-active-database';
+
+export function accountDatabaseName(userId: string) {
+  if (!/^[a-f0-9-]{36}$/i.test(userId)) throw new Error('Invalid account ID.');
+  return `${LEGACY_DATABASE}:${userId}`;
+}
+
+function activeDatabaseName() {
+  try {
+    const name = localStorage.getItem(ACTIVE_DATABASE_KEY);
+    if (name && /^DinkDerbyFieldDB:[a-f0-9-]{36}$/i.test(name)) return name;
+  } catch { /* Existing guest play still works without localStorage. */ }
+  return LEGACY_DATABASE;
+}
+
+// Account changes reload the app. No mounted screen or in-flight sync ever
+// changes its database underneath an operation.
+export const db = new DinkDerbyDatabase(activeDatabaseName());
+
+export async function databaseNameForAccount(userId: string) {
+  const legacy = db.name === LEGACY_DATABASE ? db : new DinkDerbyDatabase();
+  try {
+    if ((await legacy.settings.get('app'))?.currentUserId === userId) return LEGACY_DATABASE;
+  } finally { if (legacy !== db) legacy.close(); }
+  return accountDatabaseName(userId);
+}
+
+export function selectAccountDatabase(name: string) {
+  if (name !== LEGACY_DATABASE && !/^DinkDerbyFieldDB:[a-f0-9-]{36}$/i.test(name)) throw new Error('Invalid account storage.');
+  localStorage.setItem(ACTIVE_DATABASE_KEY, name);
+  if (localStorage.getItem(ACTIVE_DATABASE_KEY) !== name) throw new Error('Allow browser storage before signing in.');
+}

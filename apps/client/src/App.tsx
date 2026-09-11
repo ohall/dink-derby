@@ -5,7 +5,7 @@ import { BrandHeader } from './components/BrandHeader';
 import { HomeScreen } from './components/HomeScreen';
 import { DerbyScreen } from './components/DerbyScreen';
 import { CatchSheet, CreateDerbySheet, JoinDerbySheet, ProfileSheet } from './components/Sheets';
-import { db } from './db';
+import { db, databaseNameForAccount, selectAccountDatabase } from './db';
 import { initializeIdentity } from './data/identity';
 import { syncService } from './sync';
 import { resumableCatchDraft } from './data/catchDraft';
@@ -15,6 +15,7 @@ import { useInstallPrompt } from './components/useInstallPrompt';
 import { InstallSheet } from './components/InstallSheet';
 import { InstallReminder } from './components/InstallReminder';
 import { clearInviteFromUrl, parseDerbyInvite } from './domain/invites';
+import { supabase } from './lib/supabase';
 
 type SheetName = 'create' | 'join' | 'profile' | 'catch' | 'install' | null;
 
@@ -90,6 +91,23 @@ export default function App() {
     window.addEventListener('hashchange', openIncomingInvite);
     return () => { window.removeEventListener('popstate', openIncomingInvite); window.removeEventListener('hashchange', openIncomingInvite); };
   }, [ready]);
+
+  useEffect(() => {
+    if (!ready || !settings?.currentUserId || !supabase) return;
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session && session.user.id !== settings.currentUserId) {
+        // A sign-in in this or another tab requires a fresh, account-scoped DB.
+        // apiFetch independently rejects tokens belonging to a different user.
+        syncService.stop();
+        setFatalError('The signed-in account changed. Reload to open its history. Your previous local data is retained.');
+        void databaseNameForAccount(session.user.id).then(name => {
+          selectAccountDatabase(name);
+          window.location.reload();
+        }).catch(() => setFatalError('Could not open the signed-in account’s storage. Your existing local data is preserved.'));
+      }
+    });
+    return () => data.subscription.unsubscribe();
+  }, [ready, settings?.currentUserId]);
 
   useEffect(() => {
     if (!notice) return;

@@ -9,7 +9,7 @@ description: React/Vite web client with local-first architecture using Dexie for
 
 - **Framework**: React 18 + Vite
 - **Local DB**: Dexie (IndexedDB wrapper) — see `src/db.ts`
-- **Identity**: Supabase anonymous auth in deployed environments; generated local identity in offline development
+- **Identity**: Supabase guest auth, with email-code recovery behind `VITE_ACCOUNT_RECOVERY_ENABLED` until the production checklist in `docs/account-recovery.md` is verified. Generated local identity in offline development. Never replace or merge an existing guest's history on sign-in; retain account-scoped IndexedDB storage and enforce auth/local-user agreement before API calls.
 - **Styling**: Component classes in `src/index.css`
 - **Types**: Import from `@dink-derby/shared-types`
 

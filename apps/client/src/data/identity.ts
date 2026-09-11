@@ -1,5 +1,5 @@
 import type { Device, SyncOutboxItem, User } from '@dink-derby/shared-types';
-import { db, type AppSettings } from '../db';
+import { db, databaseNameForAccount, selectAccountDatabase, type AppSettings } from '../db';
 import { getOrCreateDeviceId } from '../utils/device';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 
@@ -59,6 +59,27 @@ async function initializeIdentityOnce() {
   await removeLegacyDemo();
   const existing = await db.settings.get('app');
   const existingUser = existing ? await db.users.get(existing.currentUserId) : undefined;
+  if (existing && existingUser && !navigator.onLine) return { user: existingUser, isNew: false, authMode: existing.authMode };
+  if (existing && !existingUser) throw new Error('This browser’s cached profile is incomplete. Local derby data was preserved; do not clear browser storage.');
+  if (supabase) {
+    const { data, error } = await supabase.auth.getSession();
+    // Auth refresh failures must not replace a cached offline identity.
+    if (!error && data.session) {
+      const session = data.session;
+      if (existing && session.user.id !== existing.currentUserId) {
+        selectAccountDatabase(await databaseNameForAccount(session.user.id));
+        window.location.reload();
+        return new Promise<never>(() => undefined);
+      }
+      if (!existing && !session.user.is_anonymous) {
+        const { restoreAccount } = await import('./accounts');
+        await restoreAccount(session, db);
+        const user = await db.users.get(session.user.id);
+        if (!user) throw new Error('Account history could not be restored. Reconnect and try again.');
+        return { user, isNew: false, authMode: 'supabase' as const };
+      }
+    }
+  }
   if (existing && existingUser) return { user: existingUser, isNew: false, authMode: existing.authMode };
 
   if (isSupabaseConfigured && !navigator.onLine) {

@@ -466,3 +466,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
   .sheet .finish-actions { flex-direction: column-reverse; }
   .sheet .finish-actions button { flex-basis: auto; }
 }
+.account-panel { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line, #d0c5ac); }
+.account-panel h3 { margin: 0 0 8px; font-size: 1.15rem; }
+.account-panel p { line-height: 1.5; overflow-wrap: anywhere; }
+.account-actions { display: grid; gap: 10px; }
+.account-panel .field-form { margin-top: 16px; }

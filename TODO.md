@@ -3,7 +3,7 @@
 ## Current work
 
 - [x] Release and verify resume-triggered sync when returning from another app (September 11; automated visibility-without-focus test passed against production). Physical camera/lock testing remains below.
-- [ ] Add recoverable accounts and cross-device sign-in, preserving existing angler IDs and history.
+- [x] Implement email-code account saving and cross-device sign-in, with ID preservation, isolated history restoration, and wrong-account safeguards. Tested locally; not enabled in production.
 - [ ] Approve or revise the [PostHog free-tier proposal](docs/logging-analytics-proposal.md). Do not enable collection before approval.
 - [ ] Complete the [account recovery production gate](docs/account-recovery.md): SMTP, OTP templates, identity linking, and real two-browser email verification before enabling the feature.
 

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Camera, Fish, HardDrive, Ruler, Scale, ScanLine, ShieldCheck, User as UserIcon } from 'lucide-react';
 import type { Derby, User } from '@dink-derby/shared-types';
 import { createDerby, joinDerby, saveCatch, updateProfile } from '../data/operations';
@@ -10,6 +10,9 @@ import { Sheet } from './Sheet';
 import { getCatchLocation } from '../utils/location';
 import { WaterSuggestions } from './WaterSuggestions';
 import { InviteScanner } from './InviteScanner';
+import { isAccountRecoveryEnabled } from '../lib/supabase';
+
+const AccountPanel = lazy(() => import('./AccountPanel').then(module => ({ default: module.AccountPanel })));
 
 export function CatchSheet({ derby, userId, onClose, onSaved }: { derby: Derby; userId: string; onClose: () => void; onSaved: (message?: string) => void }) {
   const { draft, update, pendingWrites, error: draftError, flush } = useCatchDraft(derby.id, userId, derby.speciesFilter || '');
@@ -259,6 +262,7 @@ export function JoinDerbySheet({ initialCode = '', invalidLink = false, onClose,
 }
 
 export function ProfileSheet({ user, onClose }: { user?: User; onClose: () => void }) {
+  const [accountBusy, setAccountBusy] = useState(false);
   const [name, setName] = useState(user?.displayName || '');
   const [usage, setUsage] = useState<{ used?: number; quota?: number }>({});
   const [saved, setSaved] = useState(false);
@@ -281,7 +285,7 @@ export function ProfileSheet({ user, onClose }: { user?: User; onClose: () => vo
   const megabytes = (value?: number) => value ? `${(value / 1_048_576).toFixed(value > 10_485_760 ? 0 : 1)} MB` : 'Unknown';
 
   return (
-    <Sheet titleId="profile-sheet-title" onClose={onClose} busy={saving}>
+    <Sheet titleId="profile-sheet-title" onClose={onClose} busy={saving || accountBusy}>
       <h2 id="profile-sheet-title">Angler profile</h2>
       <p className="sheet__intro">This name appears in derbies and standings.</p>
       <form className="field-form" onSubmit={submit}>
@@ -291,10 +295,11 @@ export function ProfileSheet({ user, onClose }: { user?: User; onClose: () => vo
           <HardDrive size={22} />
           <div><strong>Saved on this device</strong><small>{megabytes(usage.used)} used · {megabytes(usage.quota)} storage limit. This is storage, not phone memory.</small></div>
         </div></details>
-        <p className="form-help">This profile belongs to this browser. Using another browser may create a different angler.</p>
         {error && <p className="form-error" role="alert">{error}</p>}
-        <button className="button button--primary button--full" type="submit" disabled={saving}>{saved ? 'Saved' : saving ? 'Saving…' : 'Save profile'}</button>
+        <button className="button button--primary button--full" type="submit" disabled={saving || accountBusy}>{saved ? 'Saved' : saving ? 'Saving…' : 'Save profile'}</button>
       </form>
+      {isAccountRecoveryEnabled ? <Suspense fallback={<p role="status">Loading account controls…</p>}><AccountPanel onBusyChange={setAccountBusy} /></Suspense>
+        : <p className="form-help">Guest profile: keep this browser’s data to retain access. Account recovery is not available yet.</p>}
     </Sheet>
   );
 }

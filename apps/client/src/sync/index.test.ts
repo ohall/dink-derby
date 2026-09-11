@@ -12,12 +12,96 @@ beforeEach(async () => {
   await db.open();
   await db.settings.put({ id: 'app', currentUserId: 'user' });
   service = new SyncService();
-  vi.mocked(apiFetch).mockImplementation(async () => ({ json: async () => ({
+  vi.mocked(apiFetch).mockReset().mockImplementation(async () => ({ json: async () => ({
     serverTime: new Date().toISOString(), appliedOperationIds: [], rejected: [], events: [], nextCursor: 0,
     patches: { users: [], derbies: [], derbyParticipants: [], catches: [], chatMessages: [], reactions: [], media: [] },
   }) } as Response));
 });
 afterEach(async () => { service.stop(); vi.clearAllMocks(); vi.restoreAllMocks(); vi.clearAllTimers(); vi.useRealTimers(); await db.delete(); });
+
+// Wait for start()'s independent pending-count refresh before assertions/cleanup.
+async function startService() {
+  const refreshed = new Promise<void>(resolve => {
+    const unsubscribe = service.subscribe(() => { unsubscribe(); resolve(); });
+  });
+  service.start();
+  await refreshed;
+}
+
+it('syncs immediately and clears the badge when visible without a window focus event', async () => {
+  const sync = vi.spyOn(service, 'sync').mockResolvedValue(undefined);
+  const visibility = vi.spyOn(document, 'visibilityState', 'get');
+  await startService();
+  sync.mockClear();
+  document.title = '(2) Dink Derby';
+
+  visibility.mockReturnValue('hidden');
+  document.dispatchEvent(new Event('visibilitychange'));
+  expect(sync).not.toHaveBeenCalled();
+  expect(document.title).toBe('(2) Dink Derby');
+
+  visibility.mockReturnValue('visible');
+  document.dispatchEvent(new Event('visibilitychange'));
+  expect(sync).toHaveBeenCalledOnce();
+  expect(document.title).toBe('Dink Derby');
+});
+
+it('removes the visibility listener on stop and registers it only once on restart', async () => {
+  const sync = vi.spyOn(service, 'sync').mockResolvedValue(undefined);
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  await startService();
+  service.stop();
+  sync.mockClear();
+  document.dispatchEvent(new Event('visibilitychange'));
+  expect(sync).not.toHaveBeenCalled();
+
+  await startService();
+  service.start();
+  sync.mockClear();
+  document.dispatchEvent(new Event('visibilitychange'));
+  expect(sync).toHaveBeenCalledOnce();
+});
+
+it('keeps the offline guard when becoming visible', async () => {
+  // Skip the startup sync to isolate the visibility-triggered run.
+  const sync = vi.spyOn(service, 'sync').mockResolvedValueOnce(undefined);
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+  await startService();
+  document.dispatchEvent(new Event('visibilitychange'));
+  expect(sync).toHaveBeenCalledTimes(2);
+  await sync.mock.results[1].value;
+  expect(apiFetch).not.toHaveBeenCalled();
+  expect(service.getSnapshot().phase).toBe('offline');
+});
+
+it('coalesces visibility and focus events during an in-flight sync', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+  const response = await apiFetch('/sync');
+  vi.mocked(apiFetch).mockClear();
+  let release!: (response: Response) => void;
+  let onRequest!: () => void;
+  const requested = new Promise<void>(resolve => { onRequest = resolve; });
+  vi.mocked(apiFetch).mockImplementationOnce(() => {
+    onRequest();
+    return new Promise<Response>(resolve => { release = resolve; });
+  });
+  const sync = vi.spyOn(service, 'sync').mockResolvedValueOnce(undefined);
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  await startService();
+  document.dispatchEvent(new Event('visibilitychange'));
+  expect(sync).toHaveBeenCalledTimes(2);
+  const firstRun = sync.mock.results[1].value;
+  await requested;
+  window.dispatchEvent(new Event('focus'));
+  document.dispatchEvent(new Event('visibilitychange'));
+  expect(apiFetch).toHaveBeenCalledOnce();
+  release(response);
+  await firstRun;
+  await vi.advanceTimersByTimeAsync(0);
+  await sync.mock.results.at(-1)!.value;
+  expect(apiFetch).toHaveBeenCalledTimes(2); // One run, then one queued follow-up.
+});
 
 it('does not start concurrent sync or upload runs when save and focus coincide', async () => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });

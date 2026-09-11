@@ -111,7 +111,10 @@ export class SyncService {
   private handleReconnect = () => void this.sync();
   private handleOffline = () => this.publish({ phase: 'offline', message: 'Offline — safely stored here' });
   private handleVisibility = () => {
-    if (document.visibilityState === 'visible') this.resetBadge();
+    if (document.visibilityState !== 'visible') return;
+    this.resetBadge();
+    // Mobile app switching can restore visibility without a window focus event.
+    void this.sync();
   };
 
   private updateBadge() {

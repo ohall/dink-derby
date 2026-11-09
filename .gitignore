@@ -32,6 +32,10 @@ Thumbs.db
 *.swo
 *~
 
+# Claude Code local permissions. "Yes, and don't ask again" stores
+# approved shell commands here, which can include secrets.
+.claude/settings.local.json
+
 # Test coverage
 coverage/
 
